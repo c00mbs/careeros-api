@@ -1,277 +1,273 @@
-"""CareerOS MVP: a transparent resume-to-role comparison prototype."""
+"""CareerOS API: authenticated career profile and job-search data."""
 
 from __future__ import annotations
 
-import re
-from collections.abc import Iterable
-from difflib import SequenceMatcher
+import os
+from datetime import date, datetime, timedelta, timezone
+from typing import Annotated, Generator
 
-import streamlit as st
-from pypdf import PdfReader
+import jwt
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pwdlib import PasswordHash
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
-# Optional OCR helper
-try:
-    from pdf2image import convert_from_bytes
-except Exception:
-    convert_from_bytes = None
+from modules.career_dna import build_career_dna
+from modules.database import Base, engine, get_db
+from modules.models import APPLICATION_STATUSES, Application, CareerEvent, Skill, User
 
-try:
-    import pytesseract
-except Exception:
-    pytesseract = None
+SECRET_KEY = os.getenv("SECRET_KEY", "local-development-only-change-me")
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_MINUTES = int(os.getenv("ACCESS_TOKEN_MINUTES", "30"))
+password_hasher = PasswordHash.recommended()
+bearer = HTTPBearer(auto_error=False)
 
-
-SKILL_ALIASES: dict[str, tuple[str, ...]] = {
-    "Python": ("python",),
-    "SQL": ("sql", "structured query language"),
-    "Excel": ("excel", "microsoft excel"),
-    "Power BI": ("power bi", "powerbi"),
-    "Tableau": ("tableau",),
-    "Data analysis": (
-        "data analysis",
-        "analyzed data",
-        "analysed data",
-        "data analytics",
-        "analytical",
-    ),
-    "Project management": ("project management", "managed projects", "project manager"),
-    "Operations": ("operations", "operational"),
-    "Customer service": ("customer service", "customer support", "client support"),
-    "Communication": ("communication", "presented findings", "stakeholder communication"),
-    "Leadership": ("leadership", "led a team", "team lead", "managed a team"),
-    "Forecasting": ("forecasting", "forecasted"),
-    "Research": ("research", "market research"),
-    "Training": ("training", "trained staff", "employee onboarding"),
-    "Analytics": ("analytics", "analysis", "analytical"),
-    "Data visualization": ("data visualization", "dashboarding", "visualization"),
-    "Problem solving": ("problem solving", "problem-solving", "troubleshooting"),
-    "Business analysis": ("business analysis", "business analyst", "requirements gathering"),
-    "Stakeholder management": (
-        "stakeholder management",
-        "stakeholder communication",
-        "cross-functional",
-    ),
-}
-
-
-def normalize_text(value: str) -> str:
-    value = value.lower()
-    value = re.sub(r"[^a-z0-9\s]", " ", value)
-    value = re.sub(r"\s+", " ", value)
-    return value.strip()
-
-
-def sentence_contains_alias(sentence: str, alias: str) -> bool:
-    sentence_norm = normalize_text(sentence)
-    alias_norm = normalize_text(alias)
-
-    if not alias_norm:
-        return False
-
-    if alias_norm in sentence_norm:
-        return True
-
-    # For multiword aliases, match on important tokens
-    if " " in alias_norm:
-        tokens = [t for t in alias_norm.split() if len(t) > 2]
-        if tokens and any(t in sentence_norm for t in tokens):
-            return True
-
-    return False
-
-
-def fuzzy_alias_match(sentence: str, alias: str, threshold: float = 0.72) -> bool:
-    sentence_norm = normalize_text(sentence)
-    alias_norm = normalize_text(alias)
-
-    if not alias_norm:
-        return False
-
-    if alias_norm in sentence_norm:
-        return True
-
-    # Global similarity
-    similarity = SequenceMatcher(None, alias_norm, sentence_norm).ratio()
-    if similarity >= threshold:
-        return True
-
-    # Token-level similarity for multi-word aliases
-    if " " in alias_norm:
-        alias_tokens = [t for t in alias_norm.split() if len(t) > 2]
-        sentence_tokens = sentence_norm.split()
-        for token in alias_tokens:
-            best = 0.0
-            for other in sentence_tokens:
-                r = SequenceMatcher(None, token, other).ratio()
-                if r > best:
-                    best = r
-            if best >= threshold:
-                return True
-
-    return False
-
-
-def find_skill_evidence(text: str, skills: Iterable[str] | None = None) -> dict[str, str]:
-    """Return one concise snippet per skill found by exact or fuzzy alias matching."""
-    if not text or not text.strip():
-        return {}
-
-    skill_names = list(skills) if skills is not None else list(SKILL_ALIASES.keys())
-    # Split into sentences (keeps newline-separated blocks too)
-    sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
-    evidence: dict[str, str] = {}
-
-    for skill in skill_names:
-        aliases = SKILL_ALIASES.get(skill, (skill.lower(),))
-        matched_sentence = None
-        matched_alias = None
-
-        for sentence in sentences:
-            if not sentence.strip():
-                continue
-            for alias in aliases:
-                if sentence_contains_alias(sentence, alias) or fuzzy_alias_match(sentence, alias):
-                    matched_sentence = sentence
-                    matched_alias = alias
-                    break
-            if matched_sentence:
-                break
-
-        if not matched_sentence:
-            continue
-
-        snippet = re.sub(r"\s+", " ", matched_sentence).strip()
-        # Highlight the matched alias in the snippet while preserving original case
-        if matched_alias:
-            try:
-                m = re.search(re.escape(matched_alias), snippet, flags=re.IGNORECASE)
-                if m:
-                    snippet = snippet[: m.start()] + "**" + snippet[m.start() : m.end()] + "**" + snippet[m.end() :]
-            except re.error:
-                # fallback: no highlighting
-                pass
-
-        evidence[skill] = snippet[:280]
-
-    return evidence
-
-
-def extract_pdf_text(pdf_file) -> str:
-    """Extract text from a PDF and fallback to OCR if needed."""
-    # First try selectable text via pypdf
-    try:
-        pdf_file.seek(0)
-        reader = PdfReader(pdf_file)
-        pages = [page.extract_text() or "" for page in reader.pages]
-        text = "\n".join(pages).strip()
-        if text:
-            return text
-    except Exception:
-        # fall through to OCR fallback if available
-        pass
-
-    # Fallback: render pages to images and OCR
-    if convert_from_bytes is not None and pytesseract is not None:
-        try:
-            pdf_file.seek(0)
-            images = convert_from_bytes(pdf_file.getvalue())
-            ocr_pages = [pytesseract.image_to_string(img) for img in images]
-            text = "\n".join(ocr_pages).strip()
-            if text:
-                return text
-        except Exception:
-            pass
-
-    return ""
-
-
-def render_comparison(resume_skills: set[str], role_skills: set[str]) -> None:
-    supported = sorted(resume_skills & role_skills)
-    not_found = sorted(role_skills - resume_skills)
-
-    st.subheader("Role comparison")
-    st.caption("‘Not found’ means the skill was not detected in the supplied text. It does not mean you lack that skill.")
-    left, right = st.columns(2)
-
-    with left:
-        st.markdown("**Evidence found in both**")
-        st.write(", ".join(supported) if supported else "No overlap detected yet.")
-
-    with right:
-        st.markdown("**Role skills not found in the resume text**")
-        st.write(", ".join(not_found) if not_found else "No listed role skills are missing from the text.")
-
-
-# Streamlit UI
-st.set_page_config(page_title="CareerOS | Career profile", page_icon="🧭", layout="wide")
-st.title("CareerOS")
-st.caption("Turn experience into a clearer, evidence-backed view of your skills.")
-
-with st.expander("About this early prototype", expanded=False):
-    st.write(
-        "This version uses transparent phrase matching with light fuzzy matching and an OCR fallback for scanned PDFs. "
-        "It does not rank your worth, predict hiring outcomes, or send your resume to an AI service. Review every detected skill before using the comparison."
-    )
-
-st.info("Your resume is processed in this session only. This prototype does not save uploaded files or profile data.")
-
-resume_file = st.file_uploader("1. Upload your resume (PDF or TXT)", type=["pdf", "txt"])
-resume_text = ""
-
-if resume_file is not None:
-    try:
-        if resume_file.name.lower().endswith(".pdf"):
-            resume_text = extract_pdf_text(resume_file)
-        else:
-            resume_text = resume_file.getvalue().decode("utf-8", errors="replace")
-    except Exception as exc:
-        st.error(f"I couldn't read this file: {exc}")
-
-if resume_file is not None and not resume_text:
-    st.warning("No selectable text was found. Scanned PDFs need OCR or a cleaner source file. Ensure Tesseract/pdf2image are installed for OCR fallback.")
-
-role_description = st.text_area(
-    "2. Paste the target role description",
-    height=190,
-    placeholder="Paste a job description here. CareerOS compares skills from its visible skill list.",
+app = FastAPI(
+    title="CareerOS API",
+    description="Private, user-scoped career profiles, job tracking, timelines, and Career DNA.",
+    version="1.0.0",
 )
 
-if resume_text:
-    st.subheader("3. Review skills found in your resume")
-    resume_evidence = find_skill_evidence(resume_text)
-    if not resume_evidence:
-        st.warning("No skills from the prototype's current skill list were found. You can still review the extracted text below.")
-        selected_resume_skills: set[str] = set()
-    else:
-        st.caption("Select the skills you want to include. Each one shows the resume text that triggered the match.")
-        selected_resume_skills = set()
-        cols = st.columns(2)
-        for idx, (skill, snippet) in enumerate(resume_evidence.items()):
-            with cols[idx % 2]:
-                checked = st.checkbox(skill, value=True, key=f"resume_skill_{skill}")
-                if checked:
-                    selected_resume_skills.add(skill)
-                st.caption(f"Evidence: {snippet}")
 
-    role_evidence = find_skill_evidence(role_description) if role_description.strip() else {}
-    if role_description.strip():
-        st.subheader("Skills detected in the role description")
-        if role_evidence:
-            selected_role_skills = set()
-            role_cols = st.columns(2)
-            for idx, (skill, snippet) in enumerate(role_evidence.items()):
-                with role_cols[idx % 2]:
-                    checked = st.checkbox(skill, value=True, key=f"role_skill_{skill}")
-                    if checked:
-                        selected_role_skills.add(skill)
-                    st.caption(f"Evidence: {snippet}")
+@app.on_event("startup")
+def create_tables() -> None:
+    # create_all is additive and does not drop or rewrite existing SQLite data.
+    Base.metadata.create_all(bind=engine)
 
-            render_comparison(selected_resume_skills, selected_role_skills)
-        else:
-            st.warning("No skills from the current skill list were detected in this role description.")
 
-    with st.expander("Show extracted resume text"):
-        st.text(resume_text[:12000])
+class RegisterRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
 
-st.divider()
-st.caption("Early MVP • Phrase matching can miss relevant experience or flag a word used in the wrong context. Always review the evidence.")
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    email: EmailStr
+
+
+class ApplicationCreate(BaseModel):
+    company: str = Field(min_length=1, max_length=200)
+    job_title: str = Field(min_length=1, max_length=200)
+    status: str = "Saved"
+    applied_date: date | None = None
+
+
+class ApplicationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    company: str
+    job_title: str
+    status: str
+    applied_date: date | None
+
+
+class CareerEventCreate(BaseModel):
+    type: str = Field(min_length=1, max_length=50)
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    date: date
+
+
+class CareerEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    type: str
+    title: str
+    description: str | None
+    date: date
+
+
+class SkillCreate(BaseModel):
+    skill_name: str = Field(min_length=1, max_length=100)
+    proficiency: int = Field(ge=1, le=5)
+
+
+class SkillResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    skill_name: str
+    proficiency: int
+
+
+def create_access_token(user_id: int) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "iat": now,
+        "exp": now + timedelta(minutes=ACCESS_TOKEN_MINUTES),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    db: Annotated[Session, Depends(get_db)],
+) -> User:
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Valid bearer token required",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    if credentials is None:
+        raise unauthorized
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+            options={"require": ["exp", "iat", "sub"]},
+        )
+        user_id = int(payload["sub"])
+    except (jwt.PyJWTError, ValueError, TypeError, KeyError):
+        raise unauthorized
+    user = db.get(User, user_id)
+    if user is None:
+        raise unauthorized
+    return user
+
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+Database = Annotated[Session, Depends(get_db)]
+
+
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"service": "CareerOS API", "docs": "/docs"}
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def register(payload: RegisterRequest, db: Database) -> User:
+    name = payload.name.strip()
+    email = str(payload.email).strip().lower()
+    if not name:
+        raise HTTPException(status_code=422, detail="Name cannot be blank")
+    existing = db.scalar(select(User).where(func.lower(User.email) == email))
+    if existing:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+    user = User(name=name, email=email, password_hash=password_hasher.hash(payload.password))
+    db.add(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+    return user
+
+
+@app.post("/auth/login", response_model=TokenResponse)
+def login(payload: LoginRequest, db: Database) -> TokenResponse:
+    email = str(payload.email).strip().lower()
+    user = db.scalar(select(User).where(func.lower(User.email) == email))
+    if not user or not user.password_hash or not password_hasher.verify(payload.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return TokenResponse(
+        access_token=create_access_token(user.id),
+        expires_in=ACCESS_TOKEN_MINUTES * 60,
+    )
+
+
+@app.get("/me", response_model=UserResponse)
+def me(user: CurrentUser) -> User:
+    return user
+
+
+@app.get("/applications", response_model=list[ApplicationResponse])
+def list_applications(user: CurrentUser, db: Database) -> list[Application]:
+    return list(db.scalars(select(Application).where(Application.user_id == user.id).order_by(Application.id.desc())))
+
+
+@app.post("/applications", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
+def create_application(payload: ApplicationCreate, user: CurrentUser, db: Database) -> Application:
+    company, title = payload.company.strip(), payload.job_title.strip()
+    if not company or not title:
+        raise HTTPException(status_code=422, detail="Company and job title cannot be blank")
+    if payload.status not in APPLICATION_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Status must be one of: {', '.join(APPLICATION_STATUSES)}")
+    item = Application(
+        user_id=user.id, company=company, job_title=title,
+        status=payload.status, applied_date=payload.applied_date,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.get("/career-timeline", response_model=list[CareerEventResponse])
+def career_timeline(user: CurrentUser, db: Database) -> list[CareerEvent]:
+    return list(db.scalars(select(CareerEvent).where(CareerEvent.user_id == user.id).order_by(CareerEvent.date.desc(), CareerEvent.id.desc())))
+
+
+@app.post("/career-timeline", response_model=CareerEventResponse, status_code=status.HTTP_201_CREATED)
+def add_career_event(payload: CareerEventCreate, user: CurrentUser, db: Database) -> CareerEvent:
+    event_type, title = payload.type.strip(), payload.title.strip()
+    if not event_type or not title:
+        raise HTTPException(status_code=422, detail="Event type and title cannot be blank")
+    item = CareerEvent(user_id=user.id, type=event_type, title=title, description=payload.description, date=payload.date)
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.get("/skills", response_model=list[SkillResponse])
+def list_skills(user: CurrentUser, db: Database) -> list[Skill]:
+    return list(db.scalars(select(Skill).where(Skill.user_id == user.id).order_by(Skill.skill_name)))
+
+
+@app.post("/skills", response_model=SkillResponse, status_code=status.HTTP_201_CREATED)
+def add_skill(payload: SkillCreate, user: CurrentUser, db: Database) -> Skill:
+    skill_name = payload.skill_name.strip()
+    if not skill_name:
+        raise HTTPException(status_code=422, detail="Skill name cannot be blank")
+    item = Skill(user_id=user.id, skill_name=skill_name, proficiency=payload.proficiency)
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.get("/career-dna")
+def career_dna(user: CurrentUser, db: Database) -> dict[str, int]:
+    # Build from only the authenticated user's saved skills.
+    db.refresh(user, attribute_names=["skills"])
+    return build_career_dna(user)
+
+
+@app.get("/career-summary")
+def career_summary(user: CurrentUser, db: Database) -> dict[str, object]:
+    applications = db.scalar(select(func.count()).select_from(Application).where(Application.user_id == user.id)) or 0
+    events = db.scalar(select(func.count()).select_from(CareerEvent).where(CareerEvent.user_id == user.id)) or 0
+    skills = db.scalar(select(func.count()).select_from(Skill).where(Skill.user_id == user.id)) or 0
+    return {
+        "user": {"id": user.id, "name": user.name},
+        "counts": {"applications": applications, "career_events": events, "skills": skills},
+        "career_dna": career_dna(user, db),
+    }
