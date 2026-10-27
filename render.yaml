@@ -8,6 +8,10 @@ services:
     envVars:
       - key: DATABASE_URL
         value: sqlite:////var/data/careeros.db
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ACCESS_TOKEN_MINUTES
+        value: "30"
     disk:
       name: careeros-data
       mountPath: /var/data
