@@ -3,6 +3,8 @@
 import os
 import tempfile
 
+import pytest
+
 _DB_FILE = tempfile.NamedTemporaryFile(prefix="careeros-test-", suffix=".db", delete=False)
 _DB_FILE.close()
 os.environ["DATABASE_URL"] = "sqlite:///" + _DB_FILE.name
@@ -12,7 +14,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 from modules.database import Base, engine  # noqa: E402
 from api import app  # noqa: E402
 
-client = TestClient(app)
+@pytest.fixture
+def client():
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def setup_function() -> None:
@@ -20,7 +25,7 @@ def setup_function() -> None:
     Base.metadata.create_all(bind=engine)
 
 
-def register(name: str, email: str) -> dict:
+def register(client: TestClient, name: str, email: str) -> dict:
     response = client.post(
         "/auth/register",
         json={"name": name, "email": email, "password": "a-strong-test-password"},
@@ -29,7 +34,7 @@ def register(name: str, email: str) -> dict:
     return response.json()
 
 
-def token_for(email: str) -> str:
+def token_for(client: TestClient, email: str) -> str:
     response = client.post(
         "/auth/login",
         json={"email": email, "password": "a-strong-test-password"},
@@ -38,15 +43,15 @@ def token_for(email: str) -> str:
     return response.json()["access_token"]
 
 
-def test_health_and_docs() -> None:
+def test_health_and_docs(client: TestClient) -> None:
     assert client.get("/health").json() == {"status": "ok"}
     assert client.get("/openapi.json").status_code == 200
 
 
-def test_password_is_hashed_and_login_returns_expiring_token() -> None:
-    user = register("Ada", "ada@example.com")
+def test_password_is_hashed_and_login_returns_expiring_token(client: TestClient) -> None:
+    user = register(client, "Ada", "ada@example.com")
     assert "password_hash" not in user
-    token = token_for("ada@example.com")
+    token = token_for(client, "ada@example.com")
     assert token
     from modules.database import SessionLocal
     from modules.models import User
@@ -58,18 +63,18 @@ def test_password_is_hashed_and_login_returns_expiring_token() -> None:
         assert saved.password_hash != "a-strong-test-password"
 
 
-def test_private_endpoints_reject_missing_or_invalid_tokens() -> None:
+def test_private_endpoints_reject_missing_or_invalid_tokens(client: TestClient) -> None:
     assert client.get("/applications").status_code == 401
     assert client.get("/career-timeline").status_code == 401
     assert client.get("/career-dna").status_code == 401
     assert client.get("/me", headers={"Authorization": "Bearer invalid"}).status_code == 401
 
 
-def test_users_cannot_read_each_others_records() -> None:
-    register("Ada", "ada@example.com")
-    register("Grace", "grace@example.com")
-    ada = token_for("ada@example.com")
-    grace = token_for("grace@example.com")
+def test_users_cannot_read_each_others_records(client: TestClient) -> None:
+    register(client, "Ada", "ada@example.com")
+    register(client, "Grace", "grace@example.com")
+    ada = token_for(client, "ada@example.com")
+    grace = token_for(client, "grace@example.com")
 
     created = client.post(
         "/applications",
@@ -92,8 +97,8 @@ def test_users_cannot_read_each_others_records() -> None:
     assert client.get("/career-timeline", headers={"Authorization": f"Bearer {grace}"}).json() == []
 
 
-def test_duplicate_email_and_weak_password_are_rejected() -> None:
-    register("Ada", "ada@example.com")
+def test_duplicate_email_and_weak_password_are_rejected(client: TestClient) -> None:
+    register(client, "Ada", "ada@example.com")
     duplicate = client.post(
         "/auth/register",
         json={"name": "Other Ada", "email": "ADA@example.com", "password": "a-strong-test-password"},
