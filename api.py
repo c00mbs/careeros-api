@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Generator
 
@@ -25,14 +26,6 @@ ACCESS_TOKEN_MINUTES = int(os.getenv("ACCESS_TOKEN_MINUTES", "30"))
 password_hasher = PasswordHash.recommended()
 bearer = HTTPBearer(auto_error=False)
 
-app = FastAPI(
-    title="CareerOS API",
-    description="Private, user-scoped career profiles, job tracking, timelines, and Career DNA.",
-    version="1.0.0",
-)
-
-
-@app.on_event("startup")
 def create_tables() -> None:
     # Additive schema creation; preserve existing database rows.
     Base.metadata.create_all(bind=engine)
@@ -43,6 +36,20 @@ def create_tables() -> None:
         if "password_hash" not in columns:
             with engine.begin() as connection:
                 connection.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"))
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    create_tables()
+    yield
+
+
+app = FastAPI(
+    title="CareerOS API",
+    description="Private, user-scoped career profiles, job tracking, timelines, and Career DNA.",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 
 class RegisterRequest(BaseModel):
