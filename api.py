@@ -34,8 +34,15 @@ app = FastAPI(
 
 @app.on_event("startup")
 def create_tables() -> None:
-    # create_all is additive and does not drop or rewrite existing SQLite data.
+    # Additive schema creation; preserve existing database rows.
     Base.metadata.create_all(bind=engine)
+    # create_all does not add columns to an existing SQLite table.
+    if engine.dialect.name == "sqlite":
+        from sqlalchemy import inspect, text
+        columns = {column["name"] for column in inspect(engine).get_columns("users")}
+        if "password_hash" not in columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"))
 
 
 class RegisterRequest(BaseModel):
