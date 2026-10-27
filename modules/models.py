@@ -29,7 +29,9 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
-    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
+    # Nullable for backward compatibility with existing SQLite databases; new registrations always set it.
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     resumes: Mapped[list["Resume"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
