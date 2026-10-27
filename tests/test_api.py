@@ -1,12 +1,15 @@
 """API regression tests for auth and per-user data isolation."""
 
 import os
+import sys
 import tempfile
+from pathlib import Path
 
 import pytest
 
 _DB_FILE = tempfile.NamedTemporaryFile(prefix="careeros-test-", suffix=".db", delete=False)
 _DB_FILE.close()
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["DATABASE_URL"] = "sqlite:///" + _DB_FILE.name
 os.environ["SECRET_KEY"] = "test-secret-key-for-tests-only"
 
