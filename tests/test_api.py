@@ -11,7 +11,7 @@ _DB_FILE = tempfile.NamedTemporaryFile(prefix="careeros-test-", suffix=".db", de
 _DB_FILE.close()
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["DATABASE_URL"] = "sqlite:///" + _DB_FILE.name
-os.environ["SECRET_KEY"] = "test-secret-key-for-tests-only"
+os.environ["SECRET_KEY"] = "test-secret-key-for-tests-only-and-over-32-bytes"
 
 from fastapi.testclient import TestClient  # noqa: E402
 from modules.database import Base, engine  # noqa: E402
