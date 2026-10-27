@@ -1,35 +1,48 @@
-# CareerOS API
+# CareerOS
 
-A FastAPI service for career profiles, application tracking, career timelines,
-and Career DNA summaries. Data is stored in SQLAlchemy models backed by SQLite.
+CareerOS is an early career-management MVP with a FastAPI backend and a preserved Streamlit resume-to-role comparison prototype.
 
 ## Run locally
 
-```powershell
+```bash
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
+# Windows PowerShell: .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m uvicorn api:app --reload
+uvicorn api:app --reload
 ```
 
-The API listens at `http://127.0.0.1:8000`; interactive API docs are at `/docs`.
+The API runs at `http://127.0.0.1:8000`; interactive docs are at `/docs`. The original Streamlit prototype is preserved in `prototype_ui.py` and can be run separately with `streamlit run prototype_ui.py`.
 
-## Endpoints
+## Authentication
 
-- `GET /` — service welcome response.
-- `GET /health` — deployment health check.
-- `GET /applications` — sample application records.
-- `GET /career-timeline?user_id=<id>` — saved events, newest first.
-- `GET /career-dna?user_id=<id>` — saved-skill scores by category.
-- `GET /career-summary?user_id=<id>` — counts and Career DNA scores.
+- `POST /auth/register` — create an account (minimum 12-character password).
+- `POST /auth/login` — verify credentials and return a short-lived JWT bearer token.
+- `GET /me` — return the authenticated account.
 
-Tables are initialized automatically at API startup. Set `DATABASE_URL` to
-change the database URL; Render config mounts SQLite at `/var/data/careeros.db`.
+Send `Authorization: Bearer <access_token>` to private endpoints. Passwords are stored as Argon2 hashes; JWTs expire after 30 minutes by default. Set `SECRET_KEY` to a strong random secret in every non-local environment. Never commit production secrets.
 
-## Deploy to Render
+## Private API endpoints
 
-Create a Render Blueprint from this GitHub repository and choose `render.yaml`.
-The Blueprint includes a persistent disk for SQLite. Persistent disks require a
-paid Render web service and incur charges; review the current Render pricing
-before deploying. Render will provide a public `onrender.com` address after
-successful deployment.
+- `GET /applications` and `POST /applications`
+- `GET /career-timeline` and `POST /career-timeline`
+- `GET /skills` and `POST /skills`
+- `GET /career-dna`
+- `GET /career-summary`
+- `GET /health` — public health check.
+
+All career-data queries are scoped to the authenticated user. The initial Career DNA implementation is transparent fixed-rule scoring and should be treated as an exploratory indicator, not a validated assessment.
+
+## Data and deployment
+
+Set `DATABASE_URL` to configure SQLAlchemy. The Render Blueprint uses `sqlite:////var/data/careeros.db`, a persistent disk, and a generated `SECRET_KEY`. The startup routine creates missing tables and applies a narrow additive migration for the password-hash column without dropping existing rows. Back up the SQLite file before production migrations and deploys.
+
+Render persistent disks require a paid service and are mounted only at runtime; review current Render pricing and database recommendations before deploying. For multi-instance or higher-traffic production use, prefer managed PostgreSQL.
+
+## Tests
+
+```bash
+pytest -q
+```
+
+Tests cover API startup/health, registration and login, password hashing, unauthenticated access, duplicate accounts, and per-user record isolation.
