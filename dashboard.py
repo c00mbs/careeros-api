@@ -7,6 +7,7 @@ from html import escape
 from collections import Counter
 from datetime import date
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 import streamlit as st
@@ -327,6 +328,106 @@ def resume_analysis_page() -> None:
         st.text(resume_text[:12000])
 
 
+def format_job_salary(job: dict[str, Any]) -> str:
+    low, high = job.get("min_salary"), job.get("max_salary")
+    if low is None and high is None:
+        return "Compensation not listed"
+    currency = str(job.get("currency") or "")
+    period = str(job.get("salary_period") or "annual").replace("fortnightly", "per two weeks")
+    if low is not None and high is not None:
+        amount = f"{low:,.0f}–{high:,.0f}"
+    else:
+        amount = f"{(low if low is not None else high):,.0f}+"
+    return f"{currency} {amount} / {period}".strip()
+
+
+def explore_careers_page() -> None:
+    st.markdown('<div class="section-heading">Find your next opportunity</div>', unsafe_allow_html=True)
+    st.markdown('<div class="surface"><div class="surface-title">Remote roles from across the market</div><p>Search current openings by role, location, seniority, and employment type. Listings are sourced from Himalayas, refreshed daily, and link to the original posting and application page.</p><span class="small-note">Results cover remote roles only; availability may change before each listing expires.</span></div>', unsafe_allow_html=True)
+
+    filters = st.session_state.get("job_search_filters", {"q": "", "country": "Any location", "seniority": "Any level", "employment": "Any type", "sort": "Most recent"})
+    with st.form("remote_job_search"):
+        query = st.text_input("Role or keywords", value=filters["q"], placeholder="e.g. Project Manager, data analyst")
+        col_location, col_seniority, col_type, col_sort = st.columns(4)
+        with col_location:
+            country = st.selectbox("Location", ["Any location", "United States", "Canada", "United Kingdom", "Australia", "India"], index=["Any location", "United States", "Canada", "United Kingdom", "Australia", "India"].index(filters["country"]))
+        with col_seniority:
+            seniority = st.selectbox("Seniority", ["Any level", "Entry-level", "Mid-level", "Senior", "Manager", "Director", "Executive"], index=["Any level", "Entry-level", "Mid-level", "Senior", "Manager", "Director", "Executive"].index(filters["seniority"]))
+        with col_type:
+            employment = st.selectbox("Employment", ["Any type", "Full Time", "Part Time", "Contractor", "Temporary", "Intern"], index=["Any type", "Full Time", "Part Time", "Contractor", "Temporary", "Intern"].index(filters["employment"]))
+        with col_sort:
+            sort_label = st.selectbox("Sort by", ["Most recent", "Best match", "Highest salary", "Lowest salary"], index=["Most recent", "Best match", "Highest salary", "Lowest salary"].index(filters["sort"]))
+        search_clicked = st.form_submit_button("Search remote roles", use_container_width=True)
+
+    if search_clicked:
+        st.session_state.job_search_filters = {"q": query.strip(), "country": country, "seniority": seniority, "employment": employment, "sort": sort_label}
+        st.session_state.job_search_page = 1
+        filters = st.session_state.job_search_filters
+
+    params: dict[str, str] = {"page": str(st.session_state.get("job_search_page", 1))}
+    if filters["q"]:
+        params["q"] = filters["q"]
+    country_codes = {"United States": "US", "Canada": "CA", "United Kingdom": "GB", "Australia": "AU", "India": "IN"}
+    if filters["country"] in country_codes:
+        params["country"] = country_codes[filters["country"]]
+    if filters["seniority"] != "Any level":
+        params["seniority"] = filters["seniority"]
+    if filters["employment"] != "Any type":
+        params["employment_type"] = filters["employment"]
+    params["sort"] = {"Most recent": "recent", "Best match": "relevant", "Highest salary": "salaryDesc", "Lowest salary": "salaryAsc"}[filters["sort"]]
+
+    results = load_data(f"/jobs/search?{urlencode(params)}", "Job listings could not be loaded")
+    if results is None:
+        st.info("Search again in a moment. Your saved applications and profile data are unchanged.")
+        return
+
+    st.caption(f"{results.get('total_count', 0):,} matching remote role(s) · refreshed {str(results.get('refreshed_at') or 'date unavailable')[:10]} · Source: Himalayas")
+    applications = load_data("/applications", "Your saved applications could not be loaded") or []
+    saved_roles = {(str(item.get("company", "")).casefold(), str(item.get("job_title", "")).casefold()) for item in applications}
+    jobs = results.get("jobs", [])
+    if not jobs:
+        st.info("No remote roles matched those filters. Try a broader title, another location, or Any level.")
+    for job in jobs:
+        with st.container(border=True):
+            top, action = st.columns([4, 1.25], vertical_alignment="center")
+            with top:
+                st.markdown(f"### {escape(str(job.get('title') or 'Untitled role'))}")
+                st.markdown(f"**{escape(str(job.get('company') or 'Company not listed'))}**　·　{escape(str(job.get('employment_type') or 'Remote'))}")
+            with action:
+                st.link_button("Apply on Himalayas", str(job["apply_url"]), use_container_width=True)
+            details = [format_job_salary(job)]
+            if job.get("locations"):
+                details.append("Location: " + ", ".join(str(item) for item in job["locations"]))
+            if job.get("seniority"):
+                details.append(" · ".join(str(item) for item in job["seniority"]))
+            st.caption("　|　".join(details))
+            st.write(str(job.get("excerpt") or "Open the listing for role details."))
+            company_key, role_key = str(job.get("company") or "").casefold(), str(job.get("title") or "").casefold()
+            if (company_key, role_key) in saved_roles:
+                st.caption("Already in your Applications pipeline.")
+            elif st.button("Save to Applications", key=f"save_job_{job['id']}"):
+                try:
+                    api_request("POST", "/applications", {"company": job.get("company") or "Company not listed", "job_title": job.get("title") or "Untitled role", "status": "Saved"})
+                    st.success("Saved to your Applications pipeline.")
+                    st.rerun()
+                except (RuntimeError, ValueError) as exc:
+                    st.error(str(exc))
+            st.markdown(f'[View original listing · Himalayas]({job["source_url"]})', unsafe_allow_html=False)
+
+    previous, page_label, next_page = st.columns([1, 2, 1])
+    current_page = int(results.get("page", 1))
+    with previous:
+        if current_page > 1 and st.button("← Previous", use_container_width=True):
+            st.session_state.job_search_page = current_page - 1
+            st.rerun()
+    with page_label:
+        st.caption(f"Page {current_page} · listings update daily")
+    with next_page:
+        if jobs and st.button("Next →", use_container_width=True):
+            st.session_state.job_search_page = current_page + 1
+            st.rerun()
+
+
 def render_workspace() -> None:
     pages = ["Dashboard", "Explore Careers", "Analyze Résumé", "Applications", "Skills", "Career Plan", "Career DNA", "Insights"]
     user = st.session_state.user or {}
@@ -421,12 +522,7 @@ def render_workspace() -> None:
     if page == "Dashboard":
         dashboard_home(summary, applications, skills, dna, events)
     elif page == "Explore Careers":
-        st.markdown('<div class="section-heading">Explore your next direction</div>', unsafe_allow_html=True)
-        st.markdown('<div class="surface"><div class="surface-title">Start with what you know</div><p>CareerOS currently connects your saved applications, skills, and career timeline. A live job discovery feed is not available in the existing API yet.</p></div>', unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        c1.metric("Skills to bring forward", len(skills))
-        c2.metric("Roles already in view", len(applications))
-        st.info("Add target roles in Applications and record your strengths in Skills to build a useful starting point for career exploration.")
+        explore_careers_page()
     elif page == "Career Plan":
         st.markdown('<div class="section-heading">Your career plan</div>', unsafe_allow_html=True)
         st.caption("A practical starting plan shaped by the records in your account.")
@@ -469,5 +565,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
