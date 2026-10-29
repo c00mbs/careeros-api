@@ -2,8 +2,11 @@ services:
   - type: web
     name: careeros-api
     runtime: python
+    plan: starter
+    region: oregon
+    branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -12,7 +15,10 @@ services:
         generateValue: true
       - key: ACCESS_TOKEN_MINUTES
         value: "30"
+      - key: PYTHON_VERSION
+        value: "3.12.7"
     disk:
       name: careeros-data
       mountPath: /var/data
       sizeGB: 1
+
