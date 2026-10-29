@@ -5,10 +5,11 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated, Generator
+from typing import Annotated, Generator, Literal
+from urllib.parse import urlparse
 
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from modules.career_dna import build_career_dna
 from modules.database import Base, engine, get_db
+from modules.job_discovery import JobProviderError, search_remote_jobs
 from modules.models import APPLICATION_STATUSES, Application, CareerEvent, Skill, User
 
 SECRET_KEY = os.getenv("SECRET_KEY", "local-development-only-change-me")
@@ -46,7 +48,7 @@ async def lifespan(application: FastAPI):
 
 app = FastAPI(
     title="CareerOS API",
-    description="Private, user-scoped career profiles, job tracking, timelines, and Career DNA.",
+    description="Private, user-scoped career profiles, remote job search, job tracking, timelines, and Career DNA.",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -285,3 +287,83 @@ def career_summary(user: CurrentUser, db: Database) -> dict[str, object]:
         "counts": {"applications": applications, "career_events": events, "skills": skills},
         "career_dna": career_dna(user, db),
     }
+
+
+@app.get("/jobs/search")
+def search_jobs(
+    user: CurrentUser,
+    q: str | None = Query(default=None, max_length=120),
+    country: str | None = Query(default=None, max_length=60),
+    seniority: Literal["Entry-level", "Mid-level", "Senior", "Manager", "Director", "Executive"] | None = None,
+    employment_type: Literal["Full Time", "Part Time", "Contractor", "Temporary", "Intern", "Volunteer", "Other"] | None = None,
+    worldwide: bool = False,
+    sort: Literal["relevant", "recent", "salaryAsc", "salaryDesc", "nameAToZ", "nameZToA", "jobs"] = "recent",
+    page: int = Query(default=1, ge=1, le=100),
+) -> dict[str, object]:
+    """Search externally sourced remote jobs without storing applicant data."""
+    params = {"sort": sort, "page": str(page)}
+    if q and q.strip():
+        params["q"] = q.strip()
+    if country and country.strip():
+        params["country"] = country.strip()
+    if seniority:
+        params["seniority"] = seniority
+    if employment_type:
+        params["employment_type"] = employment_type
+    if worldwide:
+        params["worldwide"] = "true"
+
+    try:
+        result = search_remote_jobs(params)
+    except JobProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    now = datetime.now(timezone.utc).timestamp()
+    jobs: list[dict[str, object]] = []
+    for item in result["jobs"]:
+        if not isinstance(item, dict):
+            continue
+        apply_link = str(item.get("applicationLink", ""))
+        source_link = str(item.get("guid", ""))
+        if urlparse(apply_link).scheme != "https" or not apply_link.startswith("https://"):
+            continue
+        if urlparse(source_link).hostname not in {"himalayas.app", "www.himalayas.app"}:
+            source_link = "https://himalayas.app/jobs"
+        try:
+            expires_at = int(item.get("expiryDate", 0) or 0)
+        except (TypeError, ValueError):
+            expires_at = 0
+        if expires_at and expires_at < now:
+            continue
+        try:
+            published_at = int(item.get("pubDate", 0) or 0)
+        except (TypeError, ValueError):
+            published_at = 0
+        jobs.append({
+            "id": str(item.get("guid", "")),
+            "title": str(item.get("title", ""))[:200],
+            "company": str(item.get("companyName", ""))[:200],
+            "excerpt": str(item.get("excerpt", ""))[:1200],
+            "employment_type": str(item.get("employmentType", "")),
+            "locations": item.get("locationRestrictions", []) if isinstance(item.get("locationRestrictions", []), list) else [],
+            "seniority": item.get("seniority", []) if isinstance(item.get("seniority", []), list) else [],
+            "categories": item.get("parentCategories", []) if isinstance(item.get("parentCategories", []), list) else [],
+            "min_salary": item.get("minSalary"),
+            "max_salary": item.get("maxSalary"),
+            "salary_period": str(item.get("salaryPeriod", "annual")),
+            "currency": str(item.get("currency", "")),
+            "published_at": datetime.fromtimestamp(published_at, timezone.utc).isoformat() if published_at else None,
+            "expires_at": datetime.fromtimestamp(expires_at, timezone.utc).isoformat() if expires_at else None,
+            "apply_url": apply_link,
+            "source_url": source_link,
+        })
+
+    return {
+        "source": "Himalayas",
+        "source_url": "https://himalayas.app/jobs",
+        "refreshed_at": datetime.fromtimestamp(int(result["updated_at"]), timezone.utc).isoformat() if result.get("updated_at") else None,
+        "total_count": result["total_count"],
+        "page": result["page"],
+        "jobs": jobs,
+    }
+
