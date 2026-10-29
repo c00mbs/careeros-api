@@ -353,10 +353,28 @@ def render_workspace() -> None:
             render_applications(applications)
         return
     if page == "Skills":
-        st.markdown('<div class="section-heading">Skills & career timeline</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-heading">Your strengths, made visible</div>', unsafe_allow_html=True)
+        st.markdown('<p class="small-note">Build a grounded picture of the skills you bring and the experiences behind them.</p>', unsafe_allow_html=True)
+        skills = load_data("/skills", "Skills could not be loaded")
+        events = load_data("/career-timeline", "Timeline could not be loaded")
+        if skills is None or events is None:
+            return
+        advanced_skills = sum(1 for item in skills if int(item.get("proficiency", 0) or 0) >= 4)
+        average_rating = sum(int(item.get("proficiency", 0) or 0) for item in skills) / len(skills) if skills else 0
+        metrics = st.columns(4)
+        metrics[0].metric("Skills recorded", len(skills))
+        metrics[1].metric("Rated 4–5", advanced_skills)
+        metrics[2].metric("Average rating", f"{average_rating:.1f} / 5" if skills else "—")
+        metrics[3].metric("Career milestones", len(events))
         skill_tab, timeline_tab = st.tabs(["Skills", "Career timeline"])
         with skill_tab:
-            with st.expander("＋ Add a skill"):
+            st.markdown('<div class="section-heading">Skill intelligence</div>', unsafe_allow_html=True)
+            if skills:
+                ordered_skills = sorted(skills, key=lambda item: int(item.get("proficiency", 0) or 0), reverse=True)
+                render_bar_chart("Self-rated proficiency · 1 to 5", {str(item.get("skill_name", "Skill")): int(item.get("proficiency", 0) or 0) for item in ordered_skills})
+            else:
+                st.markdown('<div class="surface"><div class="surface-title">Start with the strengths you use</div><p>Add skills you have practiced in work, study, or personal projects. Rate your current confidence to make the profile more useful.</p><span class="small-note">Your ratings are personal reference points, not an assessment.</span></div>', unsafe_allow_html=True)
+            with st.expander("＋ Add a skill", expanded=not skills):
                 with st.form("new_skill"):
                     skill_name = st.text_input("Skill name", placeholder="e.g. Stakeholder management")
                     proficiency = st.slider("Your proficiency", 1, 5, 3)
@@ -368,10 +386,12 @@ def render_workspace() -> None:
                         st.rerun()
                     except (RuntimeError, ValueError) as exc:
                         st.error(str(exc))
-            skills = load_data("/skills", "Skills could not be loaded")
-            if skills is not None:
-                render_data_table(skills, [("skill_name", "Skill"), ("proficiency", "Proficiency")]) if skills else st.info("No skills recorded yet.")
+            if skills:
+                st.markdown('<div class="section-heading">Your recorded skills</div>', unsafe_allow_html=True)
+                render_data_table(ordered_skills, [("skill_name", "Skill"), ("proficiency", "Self-rating · 1 to 5")])
         with timeline_tab:
+            st.markdown('<div class="section-heading">Career timeline</div>', unsafe_allow_html=True)
+            st.caption("Capture the roles, projects, education, and milestones that shape your experience.")
             with st.expander("＋ Add a milestone"):
                 with st.form("new_event"):
                     event_type = st.selectbox("Milestone type", ["Education", "Role", "Project", "Certification", "Achievement", "Other"])
@@ -386,9 +406,10 @@ def render_workspace() -> None:
                         st.rerun()
                     except (RuntimeError, ValueError) as exc:
                         st.error(str(exc))
-            events = load_data("/career-timeline", "Timeline could not be loaded")
-            if events is not None:
-                render_data_table(events, [("type", "Type"), ("title", "Milestone"), ("description", "Details"), ("date", "Date")]) if events else st.info("Your timeline is ready for education, projects, and milestones.")
+            if events:
+                render_data_table(events, [("type", "Type"), ("title", "Milestone"), ("description", "Details"), ("date", "Date")])
+            else:
+                st.markdown('<div class="surface"><div class="surface-title">Your story starts here</div><p>Add a role, project, course, or achievement. Your timeline helps connect what you have done with where you want to go.</p></div>', unsafe_allow_html=True)
         return
 
     summary = load_data("/career-summary", "Career summary could not be loaded") or {}
@@ -448,4 +469,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
