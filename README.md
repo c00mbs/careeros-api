@@ -1,6 +1,6 @@
 # CareerOS
 
-CareerOS is an early career-management MVP with a FastAPI backend and a preserved Streamlit resume-to-role comparison prototype.
+Become is the parent brand for a family of tools that help people shape what comes next. CareerOS is its career intelligence workspace. This repository contains the FastAPI backend, the Streamlit CareerOS experience, and the preserved résumé-to-role comparison prototype.
 
 ## Run locally
 
@@ -12,7 +12,7 @@ python -m pip install -r requirements.txt
 uvicorn api:app --reload
 ```
 
-The API runs at `http://127.0.0.1:8000`; interactive docs are at `/docs`. The original Streamlit prototype is preserved in `prototype_ui.py` and can be run separately with `streamlit run prototype_ui.py`.
+The API runs at `http://127.0.0.1:8000`; interactive docs are at `/docs`. In a second terminal, run `streamlit run dashboard.py` for the Become landing page and CareerOS workspace. The résumé comparison prototype is preserved in `prototype_ui.py` and can be run separately with `streamlit run prototype_ui.py`.
 
 ## Authentication
 
@@ -48,12 +48,10 @@ pytest -q
 Tests cover API startup/health, registration and login, password hashing, unauthenticated access, duplicate accounts, and per-user record isolation.
 
 
-## Corporate dashboard
+## Become and CareerOS experience
 
-A separate Streamlit dashboard entrypoint is available in `dashboard.py`. Run it locally after starting the API:
+The visual direction follows the supplied prototypes: Become has an understated black-and-gold public landing page, cinematic horizon light, editorial serif typography, and a clear sign-in path. The signed-in CareerOS workspace carries that identity into a dark, gold-accented career dashboard.
 
-```bash
-streamlit run dashboard.py
-```
+The workspace reads and writes the signed-in user's existing API-backed applications, skills, and career timeline. Career DNA uses the existing exploratory fixed-rule API. Career-plan suggestions are assembled from saved profile data and are not predictions. The API does not yet provide a live job-discovery feed or résumé-analysis integration, so those views state their current limits rather than showing invented listings or scores.
 
-Set `CAREEROS_API_URL` if your API is hosted somewhere other than the default URL. The dashboard service is also defined separately in `render.yaml`; syncing the Render Blueprint is required to create/deploy that service. Do not treat a merged PR or a successful test run as proof that the live dashboard is deployed.
+Set `CAREEROS_API_URL` if your API is hosted somewhere other than the default URL. The dashboard service is defined separately in `render.yaml`; syncing the Render Blueprint is required to create and deploy that service. A merged PR or successful test run does not prove the live dashboard is deployed.
