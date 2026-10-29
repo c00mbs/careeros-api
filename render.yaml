@@ -16,3 +16,12 @@ services:
       name: careeros-data
       mountPath: /var/data
       sizeGB: 1
+
+  - type: web
+    name: careeros-dashboard
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run dashboard.py --server.address 0.0.0.0 --server.port $PORT --server.headless true
+    envVars:
+      - key: CAREEROS_API_URL
+        value: https://careeros-api-yadv.onrender.com
