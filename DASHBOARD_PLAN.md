@@ -15,7 +15,7 @@
 ## Existing implementation inspected
 - `api.py` provides FastAPI registration/login, JWT authentication, `/me`, `/applications`, `/career-timeline`, `/skills`, `/career-dna`, `/career-summary`, and `/health`.
 - `prototype_ui.py` is the existing résumé-to-role comparison prototype. It uses phrase/fuzzy matching and optional OCR and currently runs as a separate Streamlit app.
-- `render.yaml` configures the API service; it does not configure a deployed dashboard frontend.
+- `render.yaml` now contains a separate `careeros-dashboard` web-service definition alongside the API. Render still needs to sync/deploy the Blueprint and the resulting URL must be verified.
 - `requirements.txt` already includes Streamlit. The dashboard uses httpx for API requests; keep explicit dependency declarations aligned before production rollout.
 
 ## Implementation phases
@@ -39,13 +39,13 @@
 - Keep matches explainable; no fabricated fit score, hiring probability, or automatic claims that a missing keyword means a user lacks the skill.
 
 ### Phase 4 — deployment
-- Deploy the API and dashboard as separate services. Current `render.yaml` only defines the API, so the dashboard needs its own Streamlit hosting configuration or a separate Render web service.
+- Deploy the API and dashboard as separate services. `render.yaml` now defines both services; sync the Render Blueprint, confirm the dashboard service is created, and verify its assigned public URL.
 - Set `CAREEROS_API_URL` to the verified API URL.
 - Protect secrets and never log bearer tokens.
 - Verify the live dashboard URL and test an end-to-end account flow before calling it deployed.
 
 ## Release status
 - **Design preview:** concept shown in chat; not a deployed page.
-- **Repository implementation:** `dashboard.py` is the first Streamlit dashboard shell, pending test and review.
-- **Production dashboard:** not deployed or verified.
+- **Repository implementation:** `dashboard.py` and the separate Render service definition are in the feature branch, pending review and CI.
+- **Production dashboard:** not deployed or verified; Blueprint sync and live smoke tests remain.
 - **Current limitations:** API token is held in Streamlit session state; expired sessions require sign-in again. Résumé matching remains separate until Phase 3.
