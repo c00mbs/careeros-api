@@ -28,7 +28,7 @@ $env:CAREEROS_API_URL = "http://127.0.0.1:8000"
 streamlit run dashboard.py
 ```
 
-The API runs at `http://127.0.0.1:8000`; its interactive documentation is at `/docs`. Local runs use a local SQLite database named `careeros.db` in the project directory. The deployed dashboard receives its API address through `CAREEROS_API_URL` in `render.yaml`. The original résumé comparison prototype remains available separately with `streamlit run prototype_ui.py`.
+The API runs at `http://127.0.0.1:8000`; its interactive documentation is at `/docs`. Local runs use a local SQLite database named `careeros.db` in the project directory. The deployed dashboard receives its API address through `CAREEROS_API_URL` in `render.yaml`. The signed-in CareerOS workspace includes résumé-to-role skill comparison. The original standalone prototype remains available with `streamlit run prototype_ui.py`.
 
 ## What is connected today
 
@@ -46,8 +46,9 @@ The database startup migration adds the password-hash column without dropping ex
 
 - Career DNA uses fixed rules. It is exploratory and is not a validated assessment or hiring prediction.
 - Live job discovery is not available in the current API.
-- Résumé comparison remains a separate prototype and is not connected to the signed-in dashboard.
+- Résumé analysis supports PDF files with selectable text and TXT files. It compares an editable set of detected skills and shows the evidence sentence for each match. Uploaded résumé text stays in the Streamlit session and is not sent to the API or saved.
 - Career plans and insights use saved account data. They do not produce a match percentage, hiring probability, or fabricated activity.
+- Scanned image-only PDFs are not supported in the signed-in analyzer yet. The current skill list is curated, so results can miss relevant wording and must be reviewed by the user.
 - Streamlit keeps the access token in session state; an expired token requires signing in again.
 
 ## Authentication and data
@@ -78,3 +79,4 @@ pytest -q
 ```
 
 The dashboard and API are separate Render services in `render.yaml`. A successful test run does not confirm that the Blueprint has been synced or that the live sign-in flow has been verified.
+
