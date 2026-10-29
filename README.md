@@ -1,57 +1,79 @@
-# CareerOS
+# Become · CareerOS
 
-Become is the parent brand for a family of tools that help people shape what comes next. CareerOS is its career intelligence workspace. This repository contains the FastAPI backend, the Streamlit CareerOS experience, and the preserved résumé-to-role comparison prototype.
+**Become** is the parent brand. **CareerOS** is its career intelligence workspace: a private place to organize applications, skills, career milestones, and next steps.
+
+The product follows two connected visual directions:
+
+- **Become:** a minimal black-and-gold public page, cinematic horizon light, generous negative space, an editorial serif headline, and sign-in in the top navigation.
+- **CareerOS:** a dark, premium workspace with restrained gold accents, compact navigation, career analytics, applications, skills, Career DNA, a career plan, and insights.
 
 ## Run locally
 
-```bash
+Create a virtual environment and install the dependencies:
+
+```powershell
 python -m venv .venv
-# macOS/Linux: source .venv/bin/activate
-# Windows PowerShell: .\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+```
+
+Start the API in one terminal and the Become/CareerOS interface in another:
+
+```powershell
 uvicorn api:app --reload
 ```
 
-The API runs at `http://127.0.0.1:8000`; interactive docs are at `/docs`. In a second terminal, run `streamlit run dashboard.py` for the Become landing page and CareerOS workspace. The résumé comparison prototype is preserved in `prototype_ui.py` and can be run separately with `streamlit run prototype_ui.py`.
+```powershell
+streamlit run dashboard.py
+```
 
-## Authentication
+The API runs at `http://127.0.0.1:8000`; its interactive documentation is at `/docs`. Set `CAREEROS_API_URL` when the API runs at a different address. The original résumé comparison prototype remains available separately with `streamlit run prototype_ui.py`.
 
-- `POST /auth/register` — create an account (minimum 12-character password).
-- `POST /auth/login` — verify credentials and return a short-lived JWT bearer token.
-- `GET /me` — return the authenticated account.
+## What is connected today
 
-Send `Authorization: Bearer <access_token>` to private endpoints. Passwords are stored as Argon2 hashes; JWTs expire after 30 minutes by default. Set `SECRET_KEY` to a strong random secret in every non-local environment. Never commit production secrets.
+The dashboard uses the existing FastAPI authentication and account-scoped endpoints. A signed-in member can view and maintain:
 
-## Private API endpoints
+- Applications and their status.
+- Self-rated skills.
+- Education, roles, projects, and other career timeline events.
+- Career DNA indicators computed from saved skills.
+- Career-plan suggestions derived from the member's saved profile.
 
-- `GET /applications` and `POST /applications`
-- `GET /career-timeline` and `POST /career-timeline`
-- `GET /skills` and `POST /skills`
-- `GET /career-dna`
-- `GET /career-summary`
-- `GET /health` — public health check.
+The database startup migration adds the password-hash column without dropping existing users or career records. Career data endpoints filter by the authenticated user.
 
-All career-data queries are scoped to the authenticated user. The initial Career DNA implementation is transparent fixed-rule scoring and should be treated as an exploratory indicator, not a validated assessment.
+## Honest product limits
 
-## Data and deployment
+- Career DNA uses fixed rules. It is exploratory and is not a validated assessment or hiring prediction.
+- Live job discovery is not available in the current API.
+- Résumé comparison remains a separate prototype and is not connected to the signed-in dashboard.
+- Career plans and insights use saved account data. They do not produce a match percentage, hiring probability, or fabricated activity.
+- Streamlit keeps the access token in session state; an expired token requires signing in again.
 
-Set `DATABASE_URL` to configure SQLAlchemy. The Render Blueprint uses `sqlite:////var/data/careeros.db`, a persistent disk, and a generated `SECRET_KEY`. The startup routine creates missing tables and applies a narrow additive migration for the password-hash column without dropping existing rows. Back up the SQLite file before production migrations and deploys.
+## Authentication and data
 
-Render persistent disks require a paid service and are mounted only at runtime; review current Render pricing and database recommendations before deploying. For multi-instance or higher-traffic production use, prefer managed PostgreSQL.
+- `POST /auth/register` creates an account (minimum password length: 12 characters).
+- `POST /auth/login` returns a short-lived JWT bearer token.
+- Private endpoints require `Authorization: Bearer <access_token>`.
+- Passwords are stored as Argon2 hashes. JWTs expire after 30 minutes by default.
+- Configure a strong `SECRET_KEY` in every non-local environment. Do not commit production secrets.
+- `DATABASE_URL` selects the SQLAlchemy database. The Render Blueprint uses a persistent SQLite disk and a generated secret key; review the deployment configuration and back up production data before migrations.
 
-## Tests
+## Main API routes
 
-```bash
+| Route | Purpose |
+| --- | --- |
+| `GET /me` | Current signed-in account |
+| `GET`, `POST /applications` | Account application pipeline |
+| `GET`, `POST /skills` | Account skills and proficiency |
+| `GET`, `POST /career-timeline` | Account career milestones |
+| `GET /career-dna` | Exploratory profile from saved skills |
+| `GET /career-summary` | Account-level counts and profile summary |
+| `GET /health` | Public service health |
+
+## Checks
+
+```powershell
 pytest -q
 ```
 
-Tests cover API startup/health, registration and login, password hashing, unauthenticated access, duplicate accounts, and per-user record isolation.
-
-
-## Become and CareerOS experience
-
-The visual direction follows the supplied prototypes: Become has an understated black-and-gold public landing page, cinematic horizon light, editorial serif typography, and a clear sign-in path. The signed-in CareerOS workspace carries that identity into a dark, gold-accented career dashboard.
-
-The workspace reads and writes the signed-in user's existing API-backed applications, skills, and career timeline. Career DNA uses the existing exploratory fixed-rule API. Career-plan suggestions are assembled from saved profile data and are not predictions. The API does not yet provide a live job-discovery feed or résumé-analysis integration, so those views state their current limits rather than showing invented listings or scores.
-
-Set `CAREEROS_API_URL` if your API is hosted somewhere other than the default URL. The dashboard service is defined separately in `render.yaml`; syncing the Render Blueprint is required to create and deploy that service. A merged PR or successful test run does not prove the live dashboard is deployed.
+The dashboard and API are separate Render services in `render.yaml`. A successful test run does not confirm that the Blueprint has been synced or that the live sign-in flow has been verified.
