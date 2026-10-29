@@ -126,7 +126,7 @@ def applications_page() -> None:
         with st.form("new_application"):
             company = st.text_input("Company")
             title = st.text_input("Job title")
-            status = st.selectbox("Status", ["Saved", "Applied", "Interviewing", "Offer", "Rejected", "Withdrawn"])
+            status = st.selectbox("Status", ["Saved", "Interested", "Applied", "Interviewing", "Offer", "Closed"])
             applied = st.date_input("Applied date (optional)", value=None)
             submitted = st.form_submit_button("Save application", type="primary")
         if submitted:
