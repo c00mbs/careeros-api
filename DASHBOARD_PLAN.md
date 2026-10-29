@@ -25,7 +25,7 @@
 ## Workspace pages and current data support
 
 1. **Dashboard** — user-specific application, active-opportunity, skill, milestone, pipeline, and profile summaries.
-2. **Explore Careers** — profile context and honest explanation that the existing API has no job-discovery feed yet.
+2. **Explore Careers** — searchable remote listings through the existing API, with clear source attribution, original apply links, filters, pagination, and save-to-pipeline actions. The current provider refreshes its feed daily.
 3. **Analyze Résumé** — link to the preserved prototype, with matching limitations explained.
 4. **Applications** — add and review the user's company, role, status, and applied date.
 5. **Skills** — add and review self-rated skills and career-timeline events.
@@ -46,3 +46,4 @@
 - The dashboard uses Streamlit session state for the access token; expired tokens require sign-in again.
 - Career DNA is transparent fixed-rule scoring based on saved skills.
 - Job discovery and résumé analysis are not yet integrated with the authenticated dashboard/API.
+
