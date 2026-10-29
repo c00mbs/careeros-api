@@ -19,14 +19,14 @@
 - `api.py` is the FastAPI service for registration, login, JWT access, `/me`, applications, skills, career timeline, Career DNA, career summary, and health.
 - Authenticated career-data endpoints scope reads and writes to the current user. Existing SQLite records are preserved by the additive startup migration.
 - `dashboard.py` is the Become landing page and signed-in CareerOS Streamlit workspace. Its API calls use the current bearer-token authentication flow.
-- `prototype_ui.py` remains the separate résumé-to-role comparison prototype. Résumé comparison has not yet been integrated into the authenticated workspace.
+- `prototype_ui.py` remains available as the original standalone prototype. The authenticated workspace supports local résumé-to-role comparison and can prioritize job listings using recognized résumé skills.
 - `render.yaml` describes the API and dashboard as separate Render services. A live dashboard is not confirmed until the Blueprint is synced and a deployed sign-in/data flow is smoke-tested.
 
 ## Workspace pages and current data support
 
 1. **Dashboard** — user-specific application, active-opportunity, skill, milestone, pipeline, and profile summaries.
-2. **Explore Careers** — searchable remote listings through the existing API, with clear source attribution, original apply links, filters, pagination, and save-to-pipeline actions. The current provider refreshes its feed daily.
-3. **Analyze Résumé** — link to the preserved prototype, with matching limitations explained.
+2. **Explore Careers** — searchable remote listings through the existing API, with clear source attribution, original apply links, filters, pagination, save-to-pipeline actions, and optional local résumé-skill ranking for the current results page. Résumé text stays in the Streamlit session and is not sent to the job provider. The current provider refreshes its feed daily.
+3. **Analyze Résumé** — compare selectable résumé skills against a pasted role description, with evidence sentences and limitations explained.
 4. **Applications** — add and review the user's company, role, status, and applied date.
 5. **Skills** — add and review self-rated skills and career-timeline events.
 6. **Career Plan** — practical next steps derived from saved applications, skills, and milestones.

@@ -64,6 +64,25 @@ def find_skill_evidence(text: str, skills: Iterable[str] | None = None) -> dict[
     return evidence
 
 
+def rank_jobs_by_resume(jobs: Iterable[dict], resume_skills: Iterable[str]) -> list[dict]:
+    """Rank one fetched page of jobs by recognized résumé skills in listing text.
+
+    Matching is local and uses only the title, company, and provider excerpt;
+    résumé text is never sent to the job provider. This is an evidence hint,
+    not a hiring or suitability score.
+    """
+    skills = tuple(resume_skills)
+    ranked: list[dict] = []
+    for job in jobs:
+        listing_text = " ".join(
+            str(job.get(field) or "")
+            for field in ("title", "company", "excerpt", "employment_type")
+        )
+        matched = tuple(find_skill_evidence(listing_text, skills))
+        ranked.append({**job, "resume_matched_skills": matched, "resume_match_count": len(matched)})
+    return sorted(ranked, key=lambda job: job["resume_match_count"], reverse=True)
+
+
 def extract_resume_text(uploaded_file) -> str:
     """Read a PDF's selectable text or decode a TXT upload; never persist it."""
     filename = uploaded_file.name.lower()

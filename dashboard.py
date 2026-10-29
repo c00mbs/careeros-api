@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 
 import httpx
 import streamlit as st
-from resume_analysis import extract_resume_text, find_skill_evidence
+from resume_analysis import extract_resume_text, find_skill_evidence, rank_jobs_by_resume
 
 API_URL = os.getenv("CAREEROS_API_URL", "http://127.0.0.1:8000").rstrip("/")
 TIMEOUT = 15.0
@@ -288,6 +288,8 @@ def resume_analysis_page() -> None:
         st.warning("No selectable text was found. Scanned image-only PDFs are not supported in this workspace yet. Try an exported text PDF or TXT file.")
         return
 
+    st.session_state["resume_match_text"] = resume_text
+
     resume_evidence = find_skill_evidence(resume_text)
     if not resume_evidence:
         st.warning("No skills from the current CareerOS skill list were found. You can still inspect the extracted text below.")
@@ -345,6 +347,23 @@ def explore_careers_page() -> None:
     st.markdown('<div class="section-heading">Find your next opportunity</div>', unsafe_allow_html=True)
     st.markdown('<div class="surface"><div class="surface-title">Remote roles from across the market</div><p>Search current openings by role, location, seniority, and employment type. Listings are sourced from Himalayas, refreshed daily, and link to the original posting and application page.</p><span class="small-note">Results cover remote roles only; availability may change before each listing expires.</span></div>', unsafe_allow_html=True)
 
+    st.markdown("### Match roles to your résumé")
+    st.caption("Upload a résumé here, or use one you already analyzed. CareerOS compares recognized skills with each listing on your device; your résumé is not sent to the job provider or saved to your account.")
+    match_file = st.file_uploader("Résumé for job matching", type=["pdf", "txt"], key="career_match_resume_upload")
+    if match_file:
+        try:
+            st.session_state["resume_match_text"] = extract_resume_text(match_file)
+        except Exception as exc:
+            st.error(f"CareerOS could not read that file: {exc}")
+    match_text = str(st.session_state.get("resume_match_text", ""))
+    match_skills = find_skill_evidence(match_text) if match_text else {}
+    if match_text and match_skills:
+        st.success(f"Résumé ready · {len(match_skills)} recognized skills available for matching.")
+    elif match_text:
+        st.warning("CareerOS could not detect any skills from its current skill list in this résumé. Try another résumé or add role keywords to search.")
+    else:
+        st.info("Upload a PDF with selectable text or a TXT résumé to prioritize roles by your experience.")
+
     filters = st.session_state.get("job_search_filters", {"q": "", "country": "Any location", "seniority": "Any level", "employment": "Any type", "sort": "Most recent"})
     with st.form("remote_job_search"):
         query = st.text_input("Role or keywords", value=filters["q"], placeholder="e.g. Project Manager, data analyst")
@@ -385,6 +404,13 @@ def explore_careers_page() -> None:
     applications = load_data("/applications", "Your saved applications could not be loaded") or []
     saved_roles = {(str(item.get("company", "")).casefold(), str(item.get("job_title", "")).casefold()) for item in applications}
     jobs = results.get("jobs", [])
+    if match_skills:
+        st.session_state.setdefault("prioritize_resume_matches", True)
+        prioritize_matches = st.checkbox("Prioritize roles that mention my résumé skills", key="prioritize_resume_matches")
+        if prioritize_matches:
+            jobs = rank_jobs_by_resume(jobs, match_skills.keys())
+            overlap_count = sum(bool(job["resume_match_count"]) for job in jobs)
+            st.caption(f"Ranked within these {len(jobs)} listings · {overlap_count} mention at least one recognized résumé skill. Matches use listing text and may miss skills not shown in the excerpt.")
     if not jobs:
         st.info("No remote roles matched those filters. Try a broader title, another location, or Any level.")
     for job in jobs:
@@ -401,6 +427,11 @@ def explore_careers_page() -> None:
             if job.get("seniority"):
                 details.append(" · ".join(str(item) for item in job["seniority"]))
             st.caption("　|　".join(details))
+            if "resume_match_count" in job:
+                if job["resume_matched_skills"]:
+                    st.caption("Résumé skills mentioned: " + ", ".join(job["resume_matched_skills"]))
+                else:
+                    st.caption("No recognized résumé skills found in this listing excerpt.")
             st.write(str(job.get("excerpt") or "Open the listing for role details."))
             company_key, role_key = str(job.get("company") or "").casefold(), str(job.get("title") or "").casefold()
             if (company_key, role_key) in saved_roles:

@@ -47,7 +47,7 @@ The database startup migration adds the password-hash column without dropping ex
 
 - Career DNA uses fixed rules. It is exploratory and is not a validated assessment or hiring prediction.
 - Job discovery currently searches remote roles from Himalayas. Its listings refresh daily, so they are not a real-time feed and may close before the listed expiration date. Each result links to its source and original application URL.
-- Résumé analysis supports PDF files with selectable text and TXT files. It compares an editable set of detected skills and shows the evidence sentence for each match. Uploaded résumé text stays in the Streamlit session and is not sent to the API or saved.
+- Résumé analysis supports PDF files with selectable text and TXT files. In Explore Careers, detected résumé skills can prioritize remote listings by mentions in their title and excerpt; comparison happens in the Streamlit session, and résumé text is not sent to the job provider or saved to the account. The match is a listing-text hint, not a hiring or suitability score. The Analyze Résumé page also compares detected skills with a pasted job description.
 - Career plans and insights use saved account data. They do not produce a match percentage, hiring probability, or fabricated activity.
 - Scanned image-only PDFs are not supported in the signed-in analyzer yet. The current skill list is curated, so results can miss relevant wording and must be reviewed by the user.
 - Streamlit keeps the access token in session state; an expired token requires signing in again.
