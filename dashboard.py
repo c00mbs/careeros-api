@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 import streamlit as st
 
-API_URL = os.getenv("CAREEROS_API_URL", "https://careeros-api-yadv.onrender.com").rstrip("/")
+API_URL = os.getenv("CAREEROS_API_URL", "http://127.0.0.1:8000").rstrip("/")
 TIMEOUT = 15.0
 GOLD = "#d9ad62"
 
