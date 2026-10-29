@@ -35,6 +35,7 @@ The API runs at `http://127.0.0.1:8000`; its interactive documentation is at `/d
 The dashboard uses the existing FastAPI authentication and account-scoped endpoints. A signed-in member can view and maintain:
 
 - Applications and their status.
+- Remote job discovery through the Himalayas public job-search feed, with role, country, seniority, and employment filters. Members can follow the original listing or save a role to their application pipeline.
 - Self-rated skills.
 - Education, roles, projects, and other career timeline events.
 - Career DNA indicators computed from saved skills.
@@ -45,7 +46,7 @@ The database startup migration adds the password-hash column without dropping ex
 ## Honest product limits
 
 - Career DNA uses fixed rules. It is exploratory and is not a validated assessment or hiring prediction.
-- Live job discovery is not available in the current API.
+- Job discovery currently searches remote roles from Himalayas. Its listings refresh daily, so they are not a real-time feed and may close before the listed expiration date. Each result links to its source and original application URL.
 - Résumé analysis supports PDF files with selectable text and TXT files. It compares an editable set of detected skills and shows the evidence sentence for each match. Uploaded résumé text stays in the Streamlit session and is not sent to the API or saved.
 - Career plans and insights use saved account data. They do not produce a match percentage, hiring probability, or fabricated activity.
 - Scanned image-only PDFs are not supported in the signed-in analyzer yet. The current skill list is curated, so results can miss relevant wording and must be reviewed by the user.
@@ -79,4 +80,5 @@ pytest -q
 ```
 
 The dashboard and API are separate Render services in `render.yaml`. A successful test run does not confirm that the Blueprint has been synced or that the live sign-in flow has been verified.
+
 
