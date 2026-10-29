@@ -33,7 +33,8 @@ div.stButton>button:hover,div.stFormSubmitButton>button:hover{border-color:#f2d9
 div[data-baseweb="tab-list"]{gap:.35rem;border-bottom:1px solid var(--line)}button[data-baseweb="tab"]{color:#d0c7b6}
 .landing-nav{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:.5rem .3rem 1.1rem;margin-bottom:1rem}
 .become-mark{font-family:'Playfair Display',serif;color:#e2bc74;font-size:2.2rem;letter-spacing:-.06em}
-.become-mark span{display:block;font:500 .58rem 'DM Sans',sans-serif;letter-spacing:.32em;text-transform:uppercase;color:#a99b7f;margin-top:-.1rem}
+.become-mark span{font:500 .58rem 'DM Sans',sans-serif;color:#e2bc74;vertical-align:top;margin-left:.1rem}
+.st-key-landing_sign_in button{background:transparent!important;color:#e2bc74!important;border:1px solid #bd914c!important;font-weight:500!important}
 .landing-hero{min-height:74vh;display:flex;align-items:center;justify-content:center;text-align:center;position:relative;overflow:hidden;margin:0 -2rem;padding:5rem 1rem 9rem;background:radial-gradient(ellipse at 50% 92%,#b1782c40 0%,#6b481b20 13%,transparent 37%),linear-gradient(180deg,transparent 55%,#16110b 86%,#090909 100%)}
 .landing-hero:after{content:'';position:absolute;bottom:13%;left:-5%;width:110%;height:1px;background:linear-gradient(90deg,transparent,#b27a34 20%,#ffe2a0 49%,#fff3cc 50%,#e0ad59 55%,#a36b26 82%,transparent);box-shadow:0 0 12px 3px #e3a84a66,0 0 76px 22px #b7762440;transform:rotate(-1.2deg)}
 .landing-copy{position:relative;z-index:1;margin-top:-3rem}.landing-kicker,.eyebrow{color:#d2ad70;text-transform:uppercase;letter-spacing:.22em;font-size:.72rem;font-weight:600}
@@ -122,16 +123,18 @@ def render_auth_form() -> None:
 
 
 def landing_page() -> None:
-    st.markdown('<div class="landing-nav"><div class="become-mark">Become.<span>possibility, in motion</span></div><div class="landing-kicker">Platform　 ·　 About　 ·　 Vision　 ·　 Resources　 ·　 Support</div></div>', unsafe_allow_html=True)
-    st.markdown('<section class="landing-hero"><div class="landing-copy"><div class="landing-kicker">A future that is yours to shape</div><h1>Who are you<br><em>becoming?</em></h1><p>Clarity for the path ahead.</p></div></section>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1, 1, 1])
-    with c2:
-        if st.button("Sign in to CareerOS  →" if not st.session_state.show_auth else "Close sign in", key="landing_sign_in", use_container_width=True):
+    brand, navigation, sign_in = st.columns([1.35, 4.8, 1.1], vertical_alignment="center")
+    with brand:
+        st.markdown('<div class="become-mark">Become.<span>♛</span></div>', unsafe_allow_html=True)
+    with navigation:
+        st.markdown('<div class="landing-kicker" style="text-align:center;padding:.8rem 0">Platform　 ·　 About　 ·　 Vision　 ·　 Resources　 ·　 Support</div>', unsafe_allow_html=True)
+    with sign_in:
+        if st.button("Close" if st.session_state.show_auth else "Sign In　♙", key="landing_sign_in", use_container_width=True):
             st.session_state.show_auth = not st.session_state.show_auth
+    st.markdown('<div class="gold-rule"></div>', unsafe_allow_html=True)
+    st.markdown('<section class="landing-hero"><div class="landing-copy"><h1>Who are you<br><em>becoming?</em></h1></div></section>', unsafe_allow_html=True)
     if st.session_state.show_auth:
-        st.markdown('<div id="signin"></div>', unsafe_allow_html=True)
         render_auth_form()
-    st.markdown('<div style="text-align:center;color:#817765;padding:2.5rem 0 0;letter-spacing:.1em;font-size:.72rem">CAREEROS　 ·　 YOUR CAREER, IN YOUR HANDS</div>', unsafe_allow_html=True)
 
 
 def create_application_form() -> None:
@@ -198,7 +201,7 @@ def dashboard_home(summary: dict[str, Any], applications: list[dict[str, Any]], 
     m[0].metric("Applications", applications_count, help="Roles saved in your private pipeline")
     m[1].metric("Active opportunities", open_count)
     m[2].metric("Skills identified", len(skills))
-    m[3].metric("Career goals", len(career_plan(applications, skills, events)))
+    m[3].metric("Next steps", len(career_plan(applications, skills, events)))
     m[4].metric("Career milestones", len(events))
     left, middle, right = st.columns([.9, 1.45, 1.15], gap="medium")
     with left:
