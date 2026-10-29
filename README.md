@@ -24,10 +24,11 @@ uvicorn api:app --reload
 ```
 
 ```powershell
+$env:CAREEROS_API_URL = "http://127.0.0.1:8000"
 streamlit run dashboard.py
 ```
 
-The API runs at `http://127.0.0.1:8000`; its interactive documentation is at `/docs`. Set `CAREEROS_API_URL` when the API runs at a different address. The original résumé comparison prototype remains available separately with `streamlit run prototype_ui.py`.
+The API runs at `http://127.0.0.1:8000`; its interactive documentation is at `/docs`. Local runs use a local SQLite database named `careeros.db` in the project directory. The deployed dashboard receives its API address through `CAREEROS_API_URL` in `render.yaml`. The original résumé comparison prototype remains available separately with `streamlit run prototype_ui.py`.
 
 ## What is connected today
 
