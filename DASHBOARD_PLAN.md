@@ -1,51 +1,48 @@
-# CareerOS Corporate Dashboard — Design and Implementation Plan
+# Become and CareerOS — Product Direction
 
-## Product direction
-**Design:** corporate analytics, executive-clean, top navigation. Use a restrained navy/charcoal base, warm neutral surfaces, accessible contrast, concise labels, clear data hierarchy, and responsive layouts. Avoid decorative clutter and avoid implying exploratory indicators predict hiring outcomes.
+## Design references
 
-**Product promise:** “Who are you becoming?” CareerOS connects career history, skills, target roles, and job-search activity in one career intelligence workspace.
+### Become public landing page
+- Near-black canvas with a restrained warm gold palette.
+- Editorial serif headline: **“Who are you becoming?”**
+- A cinematic glow gathering at a fine horizon line, with generous negative space.
+- Quiet navigation for Platform, About, Vision, Resources, and Support, plus a clear sign-in path.
 
-## Dashboard information architecture
-1. **Overview** — account-specific application, career-event, and skill counts; Career DNA indicators; suggested next actions.
-2. **Applications** — add and review company, role, status, and applied date.
-3. **Skills & timeline** — maintain skills and proficiency; record education, roles, projects, certifications, and achievements; inspect Career DNA.
-4. **Résumé & roles** — résumé upload and job-description comparison, with visible evidence and user review.
-5. **Account access** — create account, sign in, sign out; API calls use the authenticated bearer token.
+### CareerOS signed-in workspace
+- A premium dark interface with gold highlights, serif display type, and compact top navigation.
+- Welcome and career focus, application pipeline, skill intelligence, Career DNA, career plan, and insights.
+- Personal records and metrics must come from the authenticated user's existing API data.
+- Never fabricate employers, openings, match percentages, or user activity to make a screen look complete.
 
-## Existing implementation inspected
-- `api.py` provides FastAPI registration/login, JWT authentication, `/me`, `/applications`, `/career-timeline`, `/skills`, `/career-dna`, `/career-summary`, and `/health`.
-- `prototype_ui.py` is the existing résumé-to-role comparison prototype. It uses phrase/fuzzy matching and optional OCR and currently runs as a separate Streamlit app.
-- `render.yaml` now contains a separate `careeros-dashboard` web-service definition alongside the API. Render still needs to sync/deploy the Blueprint and the resulting URL must be verified.
-- `requirements.txt` already includes Streamlit. The dashboard uses httpx for API requests; keep explicit dependency declarations aligned before production rollout.
+## Existing application architecture
 
-## Implementation phases
+- `api.py` is the FastAPI service for registration, login, JWT access, `/me`, applications, skills, career timeline, Career DNA, career summary, and health.
+- Authenticated career-data endpoints scope reads and writes to the current user. Existing SQLite records are preserved by the additive startup migration.
+- `dashboard.py` is the Become landing page and signed-in CareerOS Streamlit workspace. Its API calls use the current bearer-token authentication flow.
+- `prototype_ui.py` remains the separate résumé-to-role comparison prototype. Résumé comparison has not yet been integrated into the authenticated workspace.
+- `render.yaml` describes the API and dashboard as separate Render services. A live dashboard is not confirmed until the Blueprint is synced and a deployed sign-in/data flow is smoke-tested.
 
-### Phase 1 — dashboard shell and API-backed MVP
-- Add `dashboard.py` as a separate Streamlit frontend; keep `api.py` and the legacy prototype intact.
-- Use horizontal top navigation and responsive metric cards.
-- Add sign-in/registration, application creation/listing, skill creation/listing, career-event creation/listing, Career DNA chart, and account-specific overview.
-- Clearly label résumé comparison as a prototype until it is integrated.
-- Configure `CAREEROS_API_URL` via deployment environment, defaulting to the current API URL for local convenience.
+## Workspace pages and current data support
 
-### Phase 2 — test and usability hardening
-- Add tests for request handling and navigation-critical flows where practical.
-- Run `pytest -q`, verify startup with `streamlit run dashboard.py`, and exercise registration/login plus authenticated reads/writes against a test API/database.
-- Check mobile layout, form validation, expired-token handling, empty states, and API-unavailable messaging.
-- Do not test against or modify production user records during verification.
+1. **Dashboard** — user-specific application, active-opportunity, skill, milestone, pipeline, and profile summaries.
+2. **Explore Careers** — profile context and honest explanation that the existing API has no job-discovery feed yet.
+3. **Analyze Résumé** — link to the preserved prototype, with matching limitations explained.
+4. **Applications** — add and review the user's company, role, status, and applied date.
+5. **Skills** — add and review self-rated skills and career-timeline events.
+6. **Career Plan** — practical next steps derived from saved applications, skills, and milestones.
+7. **Career DNA** — exploratory fixed-rule profile generated by the current API; not a validated assessment.
+8. **Insights** — summary of saved data and a profile-based suggested focus, not predictive analytics.
 
-### Phase 3 — connect résumé intelligence
-- Extract matching logic from `prototype_ui.py` into a reusable, side-effect-free module.
-- Support upload parsing, evidence snippets, role-skill selection, comparison, and corrections in the dashboard.
-- Keep matches explainable; no fabricated fit score, hiring probability, or automatic claims that a missing keyword means a user lacks the skill.
+## Verification and rollout
 
-### Phase 4 — deployment
-- Deploy the API and dashboard as separate services. `render.yaml` now defines both services; sync the Render Blueprint, confirm the dashboard service is created, and verify its assigned public URL.
-- Set `CAREEROS_API_URL` to the verified API URL.
-- Protect secrets and never log bearer tokens.
-- Verify the live dashboard URL and test an end-to-end account flow before calling it deployed.
+- Run the repository tests and syntax compilation after changes.
+- Start the Streamlit entrypoint locally and confirm the landing route renders without requiring a signed-in production account.
+- Exercise account registration/login and private read/write flows only against a test database before production rollout.
+- Check narrow-screen navigation, empty states, expired-token handling, and API-unavailable messaging.
+- Confirm Render Blueprint sync, dashboard URL, and end-to-end authentication separately. Tests and a merged PR do not prove deployment.
 
-## Release status
-- **Design preview:** concept shown in chat; not a deployed page.
-- **Repository implementation:** `dashboard.py` and the separate Render service definition are in the feature branch, pending review and CI.
-- **Production dashboard:** not deployed or verified; Blueprint sync and live smoke tests remain.
-- **Current limitations:** API token is held in Streamlit session state; expired sessions require sign-in again. Résumé matching remains separate until Phase 3.
+## Current limitations
+
+- The dashboard uses Streamlit session state for the access token; expired tokens require sign-in again.
+- Career DNA is transparent fixed-rule scoring based on saved skills.
+- Job discovery and résumé analysis are not yet integrated with the authenticated dashboard/API.
