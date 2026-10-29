@@ -112,3 +112,31 @@ def test_duplicate_email_and_weak_password_are_rejected(client: TestClient) -> N
         json={"name": "New User", "email": "new@example.com", "password": "short"},
     )
     assert weak.status_code == 422
+
+
+
+def test_login_rejects_wrong_password(client: TestClient) -> None:
+    register(client, "Security Check", "security-check@example.com")
+    response = client.post(
+        "/auth/login",
+        json={"email": "security-check@example.com", "password": "not-the-correct-password"},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid email or password"
+
+
+def test_access_token_has_expiration_claim(client: TestClient) -> None:
+    import jwt
+    from datetime import datetime, timezone
+
+    register(client, "Expiry Check", "expiry-check@example.com")
+    token = token_for(client, "expiry-check@example.com")
+    claims = jwt.decode(
+        token,
+        os.environ["SECRET_KEY"],
+        algorithms=["HS256"],
+        options={"verify_exp": False},
+    )
+    assert "exp" in claims
+    assert "iat" in claims
+    assert claims["exp"] > datetime.now(timezone.utc).timestamp()
