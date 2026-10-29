@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 import streamlit as st
+from resume_analysis import extract_resume_text, find_skill_evidence
 
 API_URL = os.getenv("CAREEROS_API_URL", "http://127.0.0.1:8000").rstrip("/")
 TIMEOUT = 15.0
@@ -268,6 +269,64 @@ def dashboard_home(summary: dict[str, Any], applications: list[dict[str, Any]], 
     st.markdown('<div class="surface" style="text-align:center;color:#e8c780;font-family:Playfair Display,serif;font-size:1.2rem">Your career is the greatest project you’ll ever lead.</div>', unsafe_allow_html=True)
 
 
+def resume_analysis_page() -> None:
+    st.markdown('<div class="section-heading">Résumé & role intelligence</div>', unsafe_allow_html=True)
+    st.markdown('<div class="surface"><div class="surface-title">See where your experience meets a role</div><p>Upload a résumé and paste a job description. CareerOS highlights matching skills and the text that supports each one.</p><p class="small-note">Your file is read in this session only. It is not uploaded to the API or saved to your account.</p></div>', unsafe_allow_html=True)
+    resume_file = st.file_uploader("Upload your résumé", type=["pdf", "txt"], key="career_resume_upload")
+    role_description = st.text_area("Paste the target job description", height=190, key="career_role_description")
+    if not resume_file:
+        st.info("Choose a PDF with selectable text or a plain text résumé to begin.")
+        return
+
+    try:
+        resume_text = extract_resume_text(resume_file)
+    except Exception as exc:
+        st.error(f"CareerOS could not read that file: {exc}")
+        return
+    if not resume_text:
+        st.warning("No selectable text was found. Scanned image-only PDFs are not supported in this workspace yet. Try an exported text PDF or TXT file.")
+        return
+
+    resume_evidence = find_skill_evidence(resume_text)
+    if not resume_evidence:
+        st.warning("No skills from the current CareerOS skill list were found. You can still inspect the extracted text below.")
+    else:
+        st.markdown('<div class="section-heading">Review résumé evidence</div>', unsafe_allow_html=True)
+        st.caption("Select the skills you want to compare. Each item shows the sentence that triggered the match.")
+    resume_selected: set[str] = set()
+    columns = st.columns(2)
+    for index, (skill, evidence) in enumerate(resume_evidence.items()):
+        with columns[index % 2]:
+            if st.checkbox(skill, value=True, key=f"resume_evidence_{skill}"):
+                resume_selected.add(skill)
+            st.caption(evidence)
+
+    if role_description.strip():
+        role_evidence = find_skill_evidence(role_description)
+        st.markdown('<div class="section-heading">Review role requirements</div>', unsafe_allow_html=True)
+        if not role_evidence:
+            st.warning("No skills from the current CareerOS skill list were detected in this description.")
+        role_selected: set[str] = set()
+        role_columns = st.columns(2)
+        for index, (skill, evidence) in enumerate(role_evidence.items()):
+            with role_columns[index % 2]:
+                if st.checkbox(skill, value=True, key=f"role_evidence_{skill}"):
+                    role_selected.add(skill)
+                st.caption(evidence)
+        st.markdown('<div class="section-heading">Role comparison</div>', unsafe_allow_html=True)
+        st.caption("‘Not found’ means no supporting phrase was detected in the résumé text. It does not mean you lack the skill. This is not a hiring score.")
+        found, not_detected = st.columns(2)
+        with found:
+            st.markdown('<div class="surface-title">Evidence found in both</div>', unsafe_allow_html=True)
+            st.write(", ".join(sorted(resume_selected & role_selected)) or "No overlap detected yet.")
+        with not_detected:
+            st.markdown('<div class="surface-title">Role skills not detected</div>', unsafe_allow_html=True)
+            st.write(", ".join(sorted(role_selected - resume_selected)) or "All selected role skills have matching résumé evidence.")
+
+    with st.expander("Show extracted résumé text"):
+        st.text(resume_text[:12000])
+
+
 def render_workspace() -> None:
     pages = ["Dashboard", "Explore Careers", "Analyze Résumé", "Applications", "Skills", "Career Plan", "Career DNA", "Insights"]
     user = st.session_state.user or {}
@@ -283,6 +342,9 @@ def render_workspace() -> None:
     st.markdown('<div class="gold-rule"></div>', unsafe_allow_html=True)
 
     page = st.session_state.workspace_page
+    if page == "Analyze Résumé":
+        resume_analysis_page()
+        return
     if page == "Applications":
         st.markdown('<div class="section-heading">Your application pipeline</div>', unsafe_allow_html=True)
         create_application_form()
@@ -344,12 +406,6 @@ def render_workspace() -> None:
         c1.metric("Skills to bring forward", len(skills))
         c2.metric("Roles already in view", len(applications))
         st.info("Add target roles in Applications and record your strengths in Skills to build a useful starting point for career exploration.")
-    elif page == "Analyze Résumé":
-        st.markdown('<div class="section-heading">Résumé & role intelligence</div>', unsafe_allow_html=True)
-        st.markdown('<div class="surface"><div class="surface-title">A transparent prototype is available</div><p>The existing résumé comparison remains in its preserved prototype. It uses phrase matching and optional OCR and is not yet connected to this authenticated workspace.</p></div>', unsafe_allow_html=True)
-        st.markdown("- Upload a résumé PDF or TXT file in the prototype.\n- Paste a target job description.\n- Review detected skill evidence and inspect extracted text when a match looks wrong.")
-        st.link_button("Open résumé comparison prototype source", "https://github.com/c00mbs/careeros-api/blob/main/prototype_ui.py")
-        st.caption("Keyword overlap is not a hiring score. Results need human review.")
     elif page == "Career Plan":
         st.markdown('<div class="section-heading">Your career plan</div>', unsafe_allow_html=True)
         st.caption("A practical starting plan shaped by the records in your account.")
