@@ -46,3 +46,14 @@ pytest -q
 ```
 
 Tests cover API startup/health, registration and login, password hashing, unauthenticated access, duplicate accounts, and per-user record isolation.
+
+
+## Corporate dashboard
+
+A separate Streamlit dashboard entrypoint is available in `dashboard.py`. Run it locally after starting the API:
+
+```bash
+streamlit run dashboard.py
+```
+
+Set `CAREEROS_API_URL` if your API is hosted somewhere other than the default URL. The dashboard service is also defined separately in `render.yaml`; syncing the Render Blueprint is required to create/deploy that service. Do not treat a merged PR or a successful test run as proof that the live dashboard is deployed.
