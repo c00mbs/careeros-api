@@ -1,5 +1,24 @@
 """CareerOS MVP: a transparent resume-to-role comparison prototype."""
 
+st.markdown("""
+    <style>
+    .match-badge {
+        color: #10b981;
+        font-weight: 600;
+        background-color: rgba(16, 185, 129, 0.1);
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+    .missing-badge {
+        color: #f59e0b;
+        font-weight: 600;
+        background-color: rgba(245, 158, 11, 0.1);
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 from __future__ import annotations
 
 import re
