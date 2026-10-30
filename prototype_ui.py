@@ -204,7 +204,29 @@ def extract_pdf_text(pdf_file) -> str:
     return ""
 
 
-def render_comparison(resume_skills: set[str], role_skills: set[str]) -> None:
+def render_comparison(resume_skills: set[str], role_skills: set[str]) -> None:def render_comparison(resume_skills: set[str], role_skills: set[str]) -> None:
+    supported = sorted(resume_skills & role_skills)
+    not_found = sorted(role_skills - resume_skills)
+    
+    st.subheader("Role comparison")
+    st.caption("‘Not found’ means the skill was not detected in the supplied text. It does not mean you lack that skill.")
+    
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Evidence found in both**")
+        if supported:
+            for skill in supported:
+                st.markdown(f"- <span class='match-badge'>✓ {skill}</span>", unsafe_allow_html=True)
+        else:
+            st.write("No overlap detected yet.")
+            
+    with right:
+        st.markdown("**Role skills not found in the resume text**")
+        if not_found:
+            for skill in not_found:
+                st.markdown(f"- <span class='missing-badge'>⚠ {skill}</span>", unsafe_allow_html=True)
+        else:
+            st.write("No listed role skills are missing from the text.")
     supported = sorted(resume_skills & role_skills)
     not_found = sorted(role_skills - resume_skills)git add .
 git commit -m "Refactor analysis endpoints and update ATS match UI styling to emerald/neutral tones"
