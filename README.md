@@ -44,7 +44,6 @@ The dashboard uses the existing FastAPI authentication and account-scoped endpoi
 - Education, roles, projects, and other career timeline events.
 - Career DNA indicators computed from saved skills.
 - Career-plan suggestions derived from the member's saved profile.
-- A personal Career Map that connects a member's goals and full-life experiences to occupation tasks, transferable capabilities, adjacent roles, and remote openings. The map uses a locally bundled O*NET knowledge graph and explains why each path appeared; it does not require a résumé.
 
 The database startup migration adds the password-hash column without dropping existing users or career records. Career data endpoints filter by the authenticated user.
 
