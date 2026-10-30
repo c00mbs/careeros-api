@@ -148,6 +148,29 @@ def test_users_cannot_read_each_others_records(client: TestClient) -> None:
     assert client.get("/career-timeline", headers={"Authorization": f"Bearer {grace}"}).json() == []
 
 
+def test_career_guide_profile_is_private_and_persists_direction(client: TestClient) -> None:
+    assert client.get("/career-guide").status_code == 401
+    register(client, "Ada", "ada@example.com")
+    register(client, "Grace", "grace@example.com")
+    ada = token_for(client, "ada@example.com")
+    grace = token_for(client, "grace@example.com")
+
+    saved = client.put(
+        "/career-guide",
+        headers={"Authorization": f"Bearer {ada}"},
+        json={
+            "aspiration": "Explore data science",
+            "work_preferences": "Solve useful problems with information",
+            "constraints": "Need a predictable schedule",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["aspiration"] == "Explore data science"
+    assert saved.json()["updated_at"]
+    assert client.get("/career-guide", headers={"Authorization": f"Bearer {ada}"}).json()["constraints"] == "Need a predictable schedule"
+    assert client.get("/career-guide", headers={"Authorization": f"Bearer {grace}"}).json()["aspiration"] == ""
+
+
 def test_duplicate_email_and_weak_password_are_rejected(client: TestClient) -> None:
     register(client, "Ada", "ada@example.com")
     duplicate = client.post(

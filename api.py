@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from modules.career_dna import build_career_dna
 from modules.database import Base, engine, get_db
 from modules.job_discovery import JobProviderError, search_remote_jobs
-from modules.models import APPLICATION_STATUSES, Application, CareerEvent, Skill, User
+from modules.models import APPLICATION_STATUSES, Application, CareerEvent, CareerGuideProfile, Skill, User
 
 SECRET_KEY = os.getenv("SECRET_KEY", "local-development-only-change-me")
 JWT_ALGORITHM = "HS256"
@@ -48,7 +48,7 @@ async def lifespan(application: FastAPI):
 
 app = FastAPI(
     title="CareerOS API",
-    description="Private, user-scoped career profiles, remote job search, job tracking, timelines, and Career DNA.",
+    description="Private, user-scoped Career Map profiles, occupation exploration, remote job search, job tracking, timelines, and Career DNA.",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -76,6 +76,19 @@ class UserResponse(BaseModel):
     id: int
     name: str
     email: EmailStr
+
+
+class CareerGuideUpdate(BaseModel):
+    aspiration: str = Field(default="", max_length=2000)
+    work_preferences: str = Field(default="", max_length=4000)
+    constraints: str = Field(default="", max_length=4000)
+
+
+class CareerGuideResponse(BaseModel):
+    aspiration: str = ""
+    work_preferences: str = ""
+    constraints: str = ""
+    updated_at: datetime | None = None
 
 
 class ApplicationCreate(BaseModel):
@@ -212,6 +225,41 @@ def login(payload: LoginRequest, db: Database) -> TokenResponse:
 @app.get("/me", response_model=UserResponse)
 def me(user: CurrentUser) -> User:
     return user
+
+
+@app.get("/career-guide", response_model=CareerGuideResponse)
+def get_career_guide_profile(user: CurrentUser, db: Database) -> CareerGuideResponse:
+    profile = db.scalar(select(CareerGuideProfile).where(CareerGuideProfile.user_id == user.id))
+    if profile is None:
+        return CareerGuideResponse()
+    return CareerGuideResponse(
+        aspiration=profile.aspiration,
+        work_preferences=profile.work_preferences,
+        constraints=profile.constraints,
+        updated_at=profile.updated_at,
+    )
+
+
+@app.put("/career-guide", response_model=CareerGuideResponse)
+def update_career_guide_profile(
+    payload: CareerGuideUpdate, user: CurrentUser, db: Database
+) -> CareerGuideResponse:
+    profile = db.scalar(select(CareerGuideProfile).where(CareerGuideProfile.user_id == user.id))
+    if profile is None:
+        profile = CareerGuideProfile(user_id=user.id, updated_at=datetime.now(timezone.utc))
+        db.add(profile)
+    profile.aspiration = payload.aspiration.strip()
+    profile.work_preferences = payload.work_preferences.strip()
+    profile.constraints = payload.constraints.strip()
+    profile.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(profile)
+    return CareerGuideResponse(
+        aspiration=profile.aspiration,
+        work_preferences=profile.work_preferences,
+        constraints=profile.constraints,
+        updated_at=profile.updated_at,
+    )
 
 
 @app.get("/applications", response_model=list[ApplicationResponse])

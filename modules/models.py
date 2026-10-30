@@ -1,8 +1,8 @@
 """SQLAlchemy models for career profiles and application tracking."""
 
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Integer, String, Text
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -48,6 +48,25 @@ class User(Base):
     career_events: Mapped[list["CareerEvent"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    career_guide_profile: Mapped["CareerGuideProfile | None"] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
+
+
+class CareerGuideProfile(Base):
+    """Private goals and work-life preferences used to shape career maps."""
+
+    __tablename__ = "career_guide_profiles"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_career_guide_profile_user"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    aspiration: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    work_preferences: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    constraints: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="career_guide_profile")
 
 
 class Resume(Base):

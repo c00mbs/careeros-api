@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 
 import httpx
 import streamlit as st
+from modules.career_map import career_map_source, rank_career_paths
 from resume_analysis import extract_resume_text, find_skill_evidence, rank_jobs_by_resume
 
 API_URL = os.getenv("CAREEROS_API_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -270,6 +271,110 @@ def dashboard_home(summary: dict[str, Any], applications: list[dict[str, Any]], 
     st.markdown('<div class="surface" style="text-align:center;color:#e8c780;font-family:Playfair Display,serif;font-size:1.2rem">Your career is the greatest project you’ll ever lead.</div>', unsafe_allow_html=True)
 
 
+def career_map_page() -> None:
+    st.markdown('<div class="section-heading">Your Career Map</div>', unsafe_allow_html=True)
+    st.markdown('<div class="surface"><div class="surface-title">A career can grow from more than a job title.</div><p>Bring your paid work, study, projects, caregiving, community work, interests, and goals. CareerOS connects the work you have actually done with real occupations, day-to-day tasks, and transferable capabilities.</p><span class="small-note">Your profile and stories stay in your private CareerOS account. Path suggestions are exploratory, with the source and connection shown.</span></div>', unsafe_allow_html=True)
+
+    profile = load_data("/career-guide", "Your Career Map profile could not be loaded")
+    events = load_data("/career-timeline", "Your experience timeline could not be loaded")
+    skills = load_data("/skills", "Your skills could not be loaded")
+    if profile is None or events is None or skills is None:
+        return
+
+    profile_has_direction = any(profile.get(field) for field in ("aspiration", "work_preferences", "constraints"))
+    with st.expander("Shape the map around your life", expanded=not profile_has_direction):
+        with st.form("career_guide_profile"):
+            aspiration = st.text_input("What are you curious about or hoping to move toward?", value=profile.get("aspiration", ""), placeholder="A field, a type of work, a change, or ‘I’m still exploring’")
+            work_preferences = st.text_area("What kind of work gives you energy?", value=profile.get("work_preferences", ""), placeholder="For example: solving practical problems, helping people, making things, organizing a team, working with ideas", height=110)
+            life_constraints = st.text_area("What does work need to fit around in your life?", value=profile.get("constraints", ""), placeholder="Schedule, location, caregiving, accessibility, income needs, or anything else you choose to share", height=90)
+            profile_submitted = st.form_submit_button("Save my direction", width="stretch")
+        if profile_submitted:
+            try:
+                api_request("PUT", "/career-guide", {"aspiration": aspiration, "work_preferences": work_preferences, "constraints": life_constraints})
+                st.success("Your direction is saved to your private CareerOS profile.")
+                st.rerun()
+            except (RuntimeError, ValueError) as exc:
+                st.error(str(exc))
+
+    with st.expander("Add a piece of your story", expanded=not events):
+        st.caption("A résumé is optional. Add something from work, school, a project, caregiving, community, or everyday life. Describe what you did and who or what it helped.")
+        with st.form("career_map_evidence"):
+            evidence_type = st.selectbox("Where did it happen?", ["Paid work", "Education or training", "Personal project", "Caregiving", "Community or volunteer work", "Creative or personal life", "Other"])
+            evidence_title = st.text_input("What did you do?", placeholder="e.g. Organized family schedules and appointments")
+            evidence_story = st.text_area("Tell us what you actually did", placeholder="The situation, actions you took, people or tools involved, and what changed. Everyday words are fine.", height=130)
+            evidence_date = st.date_input("When did this happen?", value=date.today())
+            evidence_submitted = st.form_submit_button("Add to my career story", width="stretch")
+        if evidence_submitted:
+            try:
+                api_request("POST", "/career-timeline", {"type": evidence_type, "title": evidence_title, "description": evidence_story or None, "date": evidence_date.isoformat()})
+                st.success("Added to your private career story.")
+                st.rerun()
+            except (RuntimeError, ValueError) as exc:
+                st.error(str(exc))
+
+    with st.expander("Review what CareerOS is using", expanded=False):
+        if events:
+            st.markdown("**Experience and milestones**")
+            for event in events:
+                details = ": ".join(part for part in (str(event.get("type", "")), str(event.get("title", "")), str(event.get("description") or "")) if part)
+                st.write(f"• {details}")
+        else:
+            st.caption("No story items yet. You can still explore by describing what interests you above.")
+        if skills:
+            st.markdown("**Skills you chose to record**")
+            st.write(", ".join(str(skill.get("skill_name", "")) for skill in skills))
+
+    guide_profile = profile
+    life_evidence = [
+        ": ".join(part for part in (str(event.get("type", "")), str(event.get("title", "")), str(event.get("description") or "")) if part)
+        for event in events
+    ]
+    life_evidence.extend(str(skill.get("skill_name", "")) for skill in skills)
+    interests = " ".join(str(guide_profile.get(field) or "") for field in ("aspiration", "work_preferences"))
+    if not any(part.strip() for part in life_evidence) and not interests.strip():
+        st.info("Start with one curiosity or one small story from your life. There is no résumé or credential requirement to begin.")
+        return
+
+    st.markdown('<div class="section-heading">Possible paths from here</div>', unsafe_allow_html=True)
+    st.caption("CareerOS searched the full O*NET occupation catalog using the interests and experience in your account. Paths are ranked for exploration; the order is not a judgment of your ability or future potential.")
+    with st.spinner("Connecting your story to real work... "):
+        pathways = rank_career_paths(life_evidence, interests, limit=12)
+    if not pathways:
+        st.info("There is not enough shared language to make a useful connection yet. Add a little more detail about what you did, enjoy, or hope to try.")
+        return
+
+    zone_labels = {"1": "Little or no preparation", "2": "Some preparation", "3": "Medium preparation", "4": "Considerable preparation", "5": "Extensive preparation"}
+    source = career_map_source()
+    for index, pathway in enumerate(pathways):
+        with st.container(border=True):
+            st.markdown(f"### {index + 1}. {pathway['title']}")
+            st.write(pathway["description"])
+            if pathway["matched_signals"]:
+                st.markdown("**Why it surfaced**　Your story and interests share: " + ", ".join(pathway["matched_signals"]))
+            if pathway["tasks"]:
+                st.markdown("**What people do in this work**")
+                for task in pathway["tasks"]:
+                    st.markdown(f"- {task}")
+            if pathway["evidence_skill_overlap"]:
+                st.markdown("**Capabilities named in your story**　" + ", ".join(pathway["evidence_skill_overlap"]))
+            st.markdown("**Transferable capabilities often used in this work**　" + (", ".join(pathway["transferable_skills"]) or "No transferable-skill data available."))
+            if pathway["job_zone"]:
+                st.caption(f"Typical preparation in O*NET: Zone {pathway['job_zone']} — {zone_labels.get(pathway['job_zone'], 'see source')}. This describes preparation patterns, not a required degree.")
+            if pathway["related_roles"]:
+                st.caption("Related roles: " + " · ".join(pathway["related_roles"]))
+            actions = st.columns(2, vertical_alignment="center")
+            with actions[0]:
+                st.link_button("Explore occupation source", pathway["source_url"], width="stretch")
+            with actions[1]:
+                if st.button("Find open roles", key=f"career_map_jobs_{pathway['code']}", width="stretch"):
+                    st.session_state.job_search_filters = {"q": pathway["title"], "country": "Any location", "seniority": "Any level", "employment": "Any type", "sort": "Best match"}
+                    st.session_state.job_search_page = 1
+                    st.session_state.workspace_page = "Explore Careers"
+                    st.rerun()
+
+    st.caption(f"Source: [{source['name']}]({source['url']}) · {source['license']} · Occupation data updates by O*NET on its published release schedule. Current path ranking uses experience and interest language; work-life constraints are saved in your profile for future opportunity comparisons. The exploration order is not an assessment of a person’s worth, employability, or hiring probability.")
+
+
 def resume_analysis_page() -> None:
     st.markdown('<div class="section-heading">Résumé & role intelligence</div>', unsafe_allow_html=True)
     st.markdown('<div class="surface"><div class="surface-title">See where your experience meets a role</div><p>Upload a résumé and paste a job description. CareerOS highlights matching skills and the text that supports each one.</p><p class="small-note">Your file is read in this session only. It is not uploaded to the API or saved to your account.</p></div>', unsafe_allow_html=True)
@@ -460,7 +565,7 @@ def explore_careers_page() -> None:
 
 
 def render_workspace() -> None:
-    pages = ["Dashboard", "Explore Careers", "Analyze Résumé", "Applications", "Skills", "Career Plan", "Career DNA", "Insights"]
+    pages = ["Dashboard", "Career Map", "Explore Careers", "Analyze Résumé", "Applications", "Skills", "Career Plan", "Career DNA", "Insights"]
     user = st.session_state.user or {}
     brand, nav, profile = st.columns([1.05, 5.3, 1.2], vertical_alignment="center")
     with brand:
@@ -474,6 +579,9 @@ def render_workspace() -> None:
     st.markdown('<div class="gold-rule"></div>', unsafe_allow_html=True)
 
     page = st.session_state.workspace_page
+    if page == "Career Map":
+        career_map_page()
+        return
     if page == "Analyze Résumé":
         resume_analysis_page()
         return
@@ -526,7 +634,7 @@ def render_workspace() -> None:
             st.caption("Capture the roles, projects, education, and milestones that shape your experience.")
             with st.expander("＋ Add a milestone"):
                 with st.form("new_event"):
-                    event_type = st.selectbox("Milestone type", ["Education", "Role", "Project", "Certification", "Achievement", "Other"])
+                    event_type = st.selectbox("Milestone type", ["Paid work", "Education or training", "Personal project", "Caregiving", "Community or volunteer work", "Creative or personal life", "Certification", "Achievement", "Other"])
                     event_title = st.text_input("Title")
                     event_description = st.text_area("Details (optional)")
                     event_date = st.date_input("Date", value=date.today())
