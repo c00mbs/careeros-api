@@ -206,7 +206,10 @@ def extract_pdf_text(pdf_file) -> str:
 
 def render_comparison(resume_skills: set[str], role_skills: set[str]) -> None:
     supported = sorted(resume_skills & role_skills)
-    not_found = sorted(role_skills - resume_skills)
+    not_found = sorted(role_skills - resume_skills)git add .
+git commit -m "Refactor analysis endpoints and update ATS match UI styling to emerald/neutral tones"
+git push origin main
+
 
     st.subheader("Role comparison")
     st.caption("‘Not found’ means the skill was not detected in the supplied text. It does not mean you lack that skill.")
