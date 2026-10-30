@@ -1,9 +1,5 @@
 """CareerOS MVP: a transparent resume-to-role comparison prototype."""
 
-git add .
-git commit -m "Refactor analysis endpoints and update ATS match UI styling to emerald/neutral tones"
-git push origin main
-
 st.markdown("""
     <style>
     .match-badge {
