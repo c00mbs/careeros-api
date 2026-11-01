@@ -36,7 +36,7 @@ from modules.database import Base, engine, get_db
 from modules.models import APPLICATION_STATUSES, Application, CareerEvent, Skill, User
 from modules.resumes import (
     RESUME_MIME,
-    Resume,
+    ResumeUpload as Resume,
     delete_resume_file,
     ensure_resume_dir,
     resume_path,
