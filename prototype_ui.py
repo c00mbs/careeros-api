@@ -31,7 +31,7 @@ SKILL_ALIASES: dict[str, tuple[str, ...]] = {
 
 
 def normalize_text(value: str) -> str:
-    return re.sub(r"\\s+", " ", re.sub(r"[^a-z0-9\\s]", " ", value.lower())).strip()
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", " ", value.lower())).strip()
 
 
 def find_skill_evidence(text: str, skills: Iterable[str] | None = None) -> dict[str, str]:
@@ -39,7 +39,7 @@ def find_skill_evidence(text: str, skills: Iterable[str] | None = None) -> dict[
     if not text or not text.strip():
         return {}
     names = list(skills) if skills is not None else list(SKILL_ALIASES)
-    sentences = re.split(r"(?<=[.!?])\\s+|\\n+", text)
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", text)
     evidence: dict[str, str] = {}
     for skill in names:
         aliases = SKILL_ALIASES.get(skill, (skill.lower(),))
@@ -47,7 +47,7 @@ def find_skill_evidence(text: str, skills: Iterable[str] | None = None) -> dict[
             normalized = normalize_text(sentence)
             match = next((alias for alias in aliases if normalize_text(alias) in normalized), None)
             if match:
-                evidence[skill] = re.sub(r"\\s+", " ", sentence).strip()[:280]
+                evidence[skill] = re.sub(r"\s+", " ", sentence).strip()[:280]
                 break
     return evidence
 
@@ -55,7 +55,7 @@ def find_skill_evidence(text: str, skills: Iterable[str] | None = None) -> dict[
 def extract_pdf_text(uploaded_file) -> str:
     uploaded_file.seek(0)
     reader = PdfReader(uploaded_file)
-    return "\\n".join(page.extract_text() or "" for page in reader.pages).strip()
+    return "\n".join(page.extract_text() or "" for page in reader.pages).strip()
 
 
 def render_comparison(resume_skills: set[str], role_skills: set[str]) -> None:
