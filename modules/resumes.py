@@ -30,7 +30,7 @@ if MAX_UPLOAD_BYTES <= 0:
     raise RuntimeError("RESUME_MAX_MB must be positive")
 
 
-class Resume(Base):
+class ResumeUpload(Base):
     """One uploaded resume per user; a new upload replaces the previous file."""
 
     __tablename__ = "resume_uploads"
@@ -69,7 +69,7 @@ def _display_name(raw: str) -> str:
     return (name or "resume")[:150]
 
 
-def save_resume_upload(user_id: int, upload: UploadFile) -> Resume:
+def save_resume_upload(user_id: int, upload: UploadFile) -> ResumeUpload:
     if not upload.filename:
         raise HTTPException(status_code=422, detail="A file is required")
 
@@ -108,7 +108,7 @@ def save_resume_upload(user_id: int, upload: UploadFile) -> Resume:
         delete_resume_file(stored)
         raise HTTPException(status_code=500, detail="Could not store the uploaded file") from exc
 
-    return Resume(
+    return ResumeUpload(
         user_id=user_id,
         original_filename=display,
         stored_filename=stored,
