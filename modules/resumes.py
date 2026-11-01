@@ -84,7 +84,7 @@ def save_resume_upload(user_id: int, upload: UploadFile) -> Resume:
         raise HTTPException(status_code=422, detail="The uploaded file is empty")
     if ext == "pdf" and not head.startswith(b"%PDF-"):
         raise HTTPException(status_code=422, detail="File content does not match the .pdf extension")
-    if ext == "docx" and not head.startswith(b"PK\\x03\\x04"):
+    if ext == "docx" and not head.startswith(b"PK\x03\x04"):
         raise HTTPException(status_code=422, detail="File content does not match the .docx extension")
 
     stored = f"{user_id}_{uuid.uuid4().hex}.{ext}"
