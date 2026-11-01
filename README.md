@@ -28,14 +28,14 @@ Send `Authorization: Bearer <access_token>` to private endpoints. Passwords are 
 - `GET /career-timeline` and `POST /career-timeline`
 - `GET /skills` and `POST /skills`
 - `GET /career-dna`
-- `GET /career-summary`
+- `GET /resume` and `GET /resume/download` — inspect or download the authenticated user's uploaded resume.\n- `POST /resume` and `DELETE /resume` — upload or delete the authenticated user's resume.\n- `GET /career-summary`
 - `GET /health` — public health check.
 
 All career-data queries are scoped to the authenticated user. The initial Career DNA implementation is transparent fixed-rule scoring and should be treated as an exploratory indicator, not a validated assessment.
 
 ## Data and deployment
 
-Set `DATABASE_URL` to configure SQLAlchemy. The Render Blueprint uses `sqlite:////var/data/careeros.db`, a persistent disk, and a generated `SECRET_KEY`. The startup routine creates missing tables and applies a narrow additive migration for the password-hash column without dropping existing rows. Back up the SQLite file before production migrations and deploys.
+Set `DATABASE_URL` to configure SQLAlchemy. The Render Blueprint uses `sqlite:////var/data/careeros.db`, a persistent disk, and a generated `SECRET_KEY`. The startup routine creates missing tables and applies a narrow additive migration for the password-hash column without dropping existing rows. Editable resume text remains in the legacy `resumes` table; uploaded files use a separate `resume_uploads` table and are stored under `RESUME_DIR` (configured to `/var/data/resumes` in the Render Blueprint) so they survive deploys on the persistent disk. Back up the SQLite file before production migrations and deploys.
 
 Render persistent disks require a paid service and are mounted only at runtime; review current Render pricing and database recommendations before deploying. For multi-instance or higher-traffic production use, prefer managed PostgreSQL.
 
@@ -45,4 +45,9 @@ Render persistent disks require a paid service and are mounted only at runtime; 
 pytest -q
 ```
 
-Tests cover API startup/health, registration and login, password hashing, unauthenticated access, duplicate accounts, and per-user record isolation.
+GitHub Actions runs `pytest -q` on pushes and pull requests. The suite currently passes 9 tests covering API startup/health, registration and login, password hashing, token expiry, unauthenticated access, duplicate accounts, per-user record isolation, legacy-user migration, and private resume upload/download.
+
+
+## Frontend
+
+The separate [Become-CareerOs](https://github.com/c00mbs/Become-CareerOs) repository contains the Next.js frontend prototype. It currently uses clearly labelled fictional demo data and is **not yet integrated** with this API; end-to-end sign-in and live profile persistence remain outstanding.
