@@ -5,7 +5,7 @@ files use modules.resumes.Resume and the separate resume_uploads table.
 """
 from modules.resumes import (
     RESUME_MIME,
-    Resume,
+    ResumeUpload as Resume,
     delete_resume_file,
     ensure_resume_dir,
     resume_dir,
