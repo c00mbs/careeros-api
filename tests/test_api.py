@@ -140,3 +140,25 @@ def test_access_token_has_expiration_claim(client: TestClient) -> None:
     assert "exp" in claims
     assert "iat" in claims
     assert claims["exp"] > datetime.now(timezone.utc).timestamp()
+
+
+def test_resume_upload_is_private_and_downloadable(client: TestClient, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("RESUME_DIR", str(tmp_path))
+    register(client, "Ada", "resume-ada@example.com")
+    register(client, "Grace", "resume-grace@example.com")
+    ada = token_for(client, "resume-ada@example.com")
+    grace = token_for(client, "resume-grace@example.com")
+    headers = {"Authorization": f"Bearer {ada}"}
+
+    uploaded = client.post(
+        "/resume",
+        headers=headers,
+        files={"file": ("resume.txt", b"CareerOS resume test", "text/plain")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    assert uploaded.json()["original_filename"] == "resume.txt"
+
+    assert client.get("/resume", headers={"Authorization": f"Bearer {grace}"}).status_code == 404
+    downloaded = client.get("/resume/download", headers=headers)
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"CareerOS resume test"
