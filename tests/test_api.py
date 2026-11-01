@@ -26,6 +26,7 @@ def client():
 def setup_function() -> None:
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    app.state.limiter._storage.reset()
 
 
 def register(client: TestClient, name: str, email: str) -> dict:
