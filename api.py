@@ -325,8 +325,8 @@ def upload_resume(
     # failed upload never destroys the user's existing resume.
     new_resume = save_resume_upload(user.id, file)
     existing = db.scalar(select(Resume).where(Resume.user_id == user.id))
+    previous_filename = existing.stored_filename if existing else None
     if existing:
-        delete_resume_file(existing.stored_filename)
         db.delete(existing)
     db.add(new_resume)
     try:
@@ -336,6 +336,16 @@ def upload_resume(
         db.rollback()
         delete_resume_file(new_resume.stored_filename)
         raise HTTPException(status_code=409, detail="A resume already exists for this account")
+    except Exception:
+        db.rollback()
+        delete_resume_file(new_resume.stored_filename)
+        raise
+    if previous_filename:
+        try:
+            delete_resume_file(previous_filename)
+        except OSError:
+            # The database now points to the new file; stale-file cleanup can be retried.
+            pass
     return new_resume
 
 
@@ -360,9 +370,14 @@ def download_resume(user: CurrentUser, db: Database) -> FileResponse:
 @app.delete("/resume", status_code=status.HTTP_204_NO_CONTENT)
 def delete_resume(user: CurrentUser, db: Database) -> None:
     resume = _current_resume(db, user.id)
-    delete_resume_file(resume.stored_filename)
+    stored_filename = resume.stored_filename
     db.delete(resume)
     db.commit()
+    try:
+        delete_resume_file(stored_filename)
+    except OSError:
+        # The row is deleted; a stale file can be cleaned up independently.
+        pass
 
 
 @app.get("/applications", response_model=list[ApplicationResponse])
