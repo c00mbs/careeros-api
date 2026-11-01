@@ -54,6 +54,8 @@ if not SECRET_KEY:
             'python -c "import secrets; print(secrets.token_urlsafe(48))"'
         )
     SECRET_KEY = "local-development-only-change-me"
+if len(SECRET_KEY) < 32:
+    raise RuntimeError("SECRET_KEY must be at least 32 characters")
 
 JWT_ALGORITHM = "HS256"
 
